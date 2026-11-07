@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: The pacboard Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pacboard
+  labels:
+    app.kubernetes.io/name: pacboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pacboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pacboard
+    spec:
+      serviceAccountName: pacboard
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: pacboard
+          image: ghcr.io/m0rf30/pacboard
+          args: ["--auth-mode", "github"]
+          envFrom:
+            - configMapRef:
+                name: pacboard
+          env:
+            - name: PACBOARD_GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef: {name: pacboard, key: github-client-id}
+            - name: PACBOARD_GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: pacboard, key: github-client-secret}
+            - name: PACBOARD_SESSION_KEY
+              valueFrom:
+                secretKeyRef: {name: pacboard, key: session-key}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: The pacboard Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: pacboard
+
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - clusterrole.yaml
+  - clusterrolebinding.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Edit these values for your installation. The OAuth client ID/secret and the session key live in
+# the Secret "pacboard" that you create yourself (see README.md); they are not part of this kustomization.
+configMapGenerator:
+  - name: pacboard
+    literals:
+      - PACBOARD_NAMESPACES=tekton-ci
+      - PACBOARD_PUBLIC_URL=https://pacboard.example.com
+      - PACBOARD_ALLOWED_ORGS=my-github-org
+      # GitHub Enterprise: also set PACBOARD_GITHUB_URL=https://github.example.com
+
+images:
+  - name: ghcr.io/m0rf30/pacboard
+    newTag: latest

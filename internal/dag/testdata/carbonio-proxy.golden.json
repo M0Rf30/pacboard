@@ -1,0 +1,293 @@
+{
+  "edges": [
+    {
+      "from": "clone",
+      "to": "metadata",
+      "kind": "runAfter"
+    },
+    {
+      "from": "metadata",
+      "to": "gitleaks",
+      "kind": "result"
+    },
+    {
+      "from": "metadata",
+      "to": "diff",
+      "kind": "result"
+    },
+    {
+      "from": "gitleaks",
+      "to": "build-packages",
+      "kind": "runAfter"
+    },
+    {
+      "from": "diff",
+      "to": "build-packages",
+      "kind": "result"
+    },
+    {
+      "from": "build-packages",
+      "to": "upload",
+      "kind": "runAfter"
+    },
+    {
+      "from": "build-packages",
+      "to": "debuginfod",
+      "kind": "runAfter"
+    },
+    {
+      "from": "gitleaks",
+      "to": "build-images",
+      "kind": "runAfter"
+    },
+    {
+      "from": "upload",
+      "to": "release",
+      "kind": "runAfter"
+    },
+    {
+      "from": "debuginfod",
+      "to": "release",
+      "kind": "runAfter"
+    },
+    {
+      "from": "build-images",
+      "to": "release",
+      "kind": "runAfter"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "clone",
+      "taskRunName": "carbonio-proxy-9fjnt-clone",
+      "status": "Succeeded",
+      "reason": "Succeeded",
+      "finally": false,
+      "matrixCount": 1,
+      "taskRunNames": [
+        "carbonio-proxy-9fjnt-clone"
+      ],
+      "startTime": "2026-11-07T17:58:17Z",
+      "completionTime": "2026-11-07T17:58:27Z",
+      "steps": [
+        {
+          "name": "clone",
+          "status": "Succeeded",
+          "exitCode": 0,
+          "reason": "Completed",
+          "startTime": "2026-11-07T17:58:25Z",
+          "completionTime": "2026-11-07T17:58:27Z"
+        }
+      ]
+    },
+    {
+      "id": "metadata",
+      "taskRunName": "carbonio-proxy-9fjnt-metadata",
+      "status": "Succeeded",
+      "reason": "Succeeded",
+      "finally": false,
+      "matrixCount": 1,
+      "taskRunNames": [
+        "carbonio-proxy-9fjnt-metadata"
+      ],
+      "startTime": "2026-11-07T17:58:28Z",
+      "completionTime": "2026-11-07T17:58:34Z",
+      "steps": [
+        {
+          "name": "metadata",
+          "status": "Succeeded",
+          "exitCode": 0,
+          "reason": "Completed",
+          "startTime": "2026-11-07T17:58:31Z",
+          "completionTime": "2026-11-07T17:58:32Z"
+        },
+        {
+          "name": "check-pr-open",
+          "status": "Succeeded",
+          "exitCode": 0,
+          "reason": "Completed",
+          "startTime": "2026-11-07T17:58:33Z",
+          "completionTime": "2026-11-07T17:58:33Z"
+        }
+      ]
+    },
+    {
+      "id": "gitleaks",
+      "taskRunName": "carbonio-proxy-9fjnt-gitleaks",
+      "status": "Succeeded",
+      "reason": "Succeeded",
+      "finally": false,
+      "matrixCount": 1,
+      "taskRunNames": [
+        "carbonio-proxy-9fjnt-gitleaks"
+      ],
+      "startTime": "2026-11-07T17:58:34Z",
+      "completionTime": "2026-11-07T17:58:39Z",
+      "steps": [
+        {
+          "name": "scan",
+          "status": "Succeeded",
+          "exitCode": 0,
+          "reason": "Completed",
+          "startTime": "2026-11-07T17:58:38Z",
+          "completionTime": "2026-11-07T17:58:38Z"
+        }
+      ]
+    },
+    {
+      "id": "diff",
+      "taskRunName": "carbonio-proxy-9fjnt-diff",
+      "status": "Succeeded",
+      "reason": "Succeeded",
+      "finally": false,
+      "matrixCount": 1,
+      "taskRunNames": [
+        "carbonio-proxy-9fjnt-diff"
+      ],
+      "startTime": "2026-11-07T17:58:34Z",
+      "completionTime": "2026-11-07T17:58:41Z",
+      "steps": [
+        {
+          "name": "detect",
+          "status": "Succeeded",
+          "exitCode": 0,
+          "reason": "Completed",
+          "startTime": "2026-11-07T17:58:40Z",
+          "completionTime": "2026-11-07T17:58:40Z"
+        }
+      ]
+    },
+    {
+      "id": "build-packages",
+      "taskRunName": "carbonio-proxy-9fjnt-build-packages-0",
+      "status": "Succeeded",
+      "reason": "Succeeded",
+      "finally": false,
+      "matrixCount": 4,
+      "taskRunNames": [
+        "carbonio-proxy-9fjnt-build-packages-0",
+        "carbonio-proxy-9fjnt-build-packages-1",
+        "carbonio-proxy-9fjnt-build-packages-2",
+        "carbonio-proxy-9fjnt-build-packages-3"
+      ],
+      "startTime": "2026-11-07T17:58:41Z",
+      "completionTime": "2026-11-07T17:58:48Z",
+      "steps": [
+        {
+          "name": "build",
+          "status": "Succeeded",
+          "exitCode": 0,
+          "reason": "Completed",
+          "startTime": "2026-11-07T17:58:46Z",
+          "completionTime": "2026-11-07T17:58:46Z"
+        }
+      ]
+    },
+    {
+      "id": "upload",
+      "taskRunName": "carbonio-proxy-9fjnt-upload",
+      "status": "Succeeded",
+      "reason": "Succeeded",
+      "finally": false,
+      "matrixCount": 1,
+      "taskRunNames": [
+        "carbonio-proxy-9fjnt-upload"
+      ],
+      "startTime": "2026-11-07T17:58:48Z",
+      "completionTime": "2026-11-07T17:58:56Z",
+      "steps": [
+        {
+          "name": "plan",
+          "status": "Succeeded",
+          "exitCode": 0,
+          "reason": "Completed",
+          "startTime": "2026-11-07T17:58:54Z",
+          "completionTime": "2026-11-07T17:58:54Z"
+        },
+        {
+          "name": "artifactory",
+          "status": "Succeeded",
+          "exitCode": 0,
+          "reason": "Completed",
+          "startTime": "2026-11-07T17:58:54Z",
+          "completionTime": "2026-11-07T17:58:54Z"
+        },
+        {
+          "name": "nexus",
+          "status": "Succeeded",
+          "exitCode": 0,
+          "reason": "Completed",
+          "startTime": "2026-11-07T17:58:54Z",
+          "completionTime": "2026-11-07T17:58:55Z"
+        }
+      ]
+    },
+    {
+      "id": "debuginfod",
+      "taskRunName": "",
+      "status": "Skipped",
+      "reason": "When Expressions evaluated to false",
+      "finally": false,
+      "matrixCount": 1,
+      "taskRunNames": [],
+      "startTime": null,
+      "completionTime": null,
+      "steps": []
+    },
+    {
+      "id": "build-images",
+      "taskRunName": "carbonio-proxy-9fjnt-build-images-0",
+      "status": "Succeeded",
+      "reason": "Succeeded",
+      "finally": false,
+      "matrixCount": 2,
+      "taskRunNames": [
+        "carbonio-proxy-9fjnt-build-images-0",
+        "carbonio-proxy-9fjnt-build-images-1"
+      ],
+      "startTime": "2026-11-07T17:58:39Z",
+      "completionTime": "2026-11-07T17:59:35Z",
+      "steps": [
+        {
+          "name": "build-and-push",
+          "status": "Succeeded",
+          "exitCode": 0,
+          "reason": "Completed",
+          "startTime": "2026-11-07T17:58:43Z",
+          "completionTime": "2026-11-07T17:59:34Z"
+        }
+      ]
+    },
+    {
+      "id": "release",
+      "taskRunName": "carbonio-proxy-9fjnt-release",
+      "status": "Succeeded",
+      "reason": "Succeeded",
+      "finally": false,
+      "matrixCount": 1,
+      "taskRunNames": [
+        "carbonio-proxy-9fjnt-release"
+      ],
+      "startTime": "2026-11-07T17:59:42Z",
+      "completionTime": "2026-11-07T17:59:47Z",
+      "steps": [
+        {
+          "name": "guard",
+          "status": "Succeeded",
+          "exitCode": 0,
+          "reason": "Completed",
+          "startTime": "2026-11-07T17:59:46Z",
+          "completionTime": "2026-11-07T17:59:46Z"
+        },
+        {
+          "name": "release",
+          "status": "Succeeded",
+          "exitCode": 0,
+          "reason": "Completed",
+          "startTime": "2026-11-07T17:59:46Z",
+          "completionTime": "2026-11-07T17:59:46Z"
+        }
+      ]
+    }
+  ]
+}

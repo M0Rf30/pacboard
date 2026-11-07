@@ -1,0 +1,992 @@
+{
+  "apiVersion": "tekton.dev/v1",
+  "kind": "PipelineRun",
+  "metadata": {
+    "name": "carbonio-proxy-9fjnt",
+    "namespace": "tekton-ci",
+    "labels": {
+      "app.kubernetes.io/managed-by": "pipelinesascode.tekton.dev",
+      "app.kubernetes.io/version": "v0.52.0",
+      "pipelinesascode.tekton.dev/check-run-id": "128482194628",
+      "pipelinesascode.tekton.dev/event-type": "test-all-comment",
+      "pipelinesascode.tekton.dev/original-prname": "carbonio-proxy",
+      "pipelinesascode.tekton.dev/pull-request": "323",
+      "pipelinesascode.tekton.dev/repository": "carbonio-proxy",
+      "pipelinesascode.tekton.dev/sha": "41cd53e92af56d6f708133e56fe4297a9217b35b",
+      "pipelinesascode.tekton.dev/state": "completed",
+      "pipelinesascode.tekton.dev/url-org": "zextras",
+      "pipelinesascode.tekton.dev/url-repository": "carbonio-proxy",
+      "tekton.dev/pipeline": "carbonio-proxy"
+    },
+    "annotations": {
+      "pipelinesascode.tekton.dev/branch": "main",
+      "pipelinesascode.tekton.dev/check-run-id": "128482194628",
+      "pipelinesascode.tekton.dev/event-type": "test-all-comment",
+      "pipelinesascode.tekton.dev/git-provider": "github",
+      "pipelinesascode.tekton.dev/original-prname": "carbonio-proxy",
+      "pipelinesascode.tekton.dev/pull-request": "323",
+      "pipelinesascode.tekton.dev/repo-url": "https://github.com/zextras/carbonio-proxy",
+      "pipelinesascode.tekton.dev/repository": "carbonio-proxy",
+      "pipelinesascode.tekton.dev/sender": "M0Rf30",
+      "pipelinesascode.tekton.dev/sha": "41cd53e92af56d6f708133e56fe4297a9217b35b",
+      "pipelinesascode.tekton.dev/sha-title": "ci: pin tekton-catalog v1.0.0",
+      "pipelinesascode.tekton.dev/sha-url": "https://github.com/zextras/carbonio-proxy/commit/41cd53e92af56d6f708133e56fe4297a9217b35b",
+      "pipelinesascode.tekton.dev/source-branch": "ci/tekton-eval",
+      "pipelinesascode.tekton.dev/state": "completed",
+      "pipelinesascode.tekton.dev/url-org": "zextras",
+      "pipelinesascode.tekton.dev/url-repository": "carbonio-proxy"
+    }
+  },
+  "spec": {
+    "params": [
+      {
+        "name": "repo-url",
+        "value": "https://github.com/zextras/carbonio-proxy"
+      },
+      {
+        "name": "revision",
+        "value": "41cd53e92af56d6f708133e56fe4297a9217b35b"
+      },
+      {
+        "name": "source-branch",
+        "value": "ci/tekton-eval"
+      },
+      {
+        "name": "target-branch",
+        "value": "main"
+      },
+      {
+        "name": "event-type",
+        "value": "pull_request"
+      },
+      {
+        "name": "pull-request-number",
+        "value": "323"
+      },
+      {
+        "name": "git-auth-secret",
+        "value": "pac-gitauth-jlnyfd"
+      },
+      {
+        "name": "build-flags",
+        "value": " -ds "
+      },
+      {
+        "name": "use-default-excludes",
+        "value": "false"
+      },
+      {
+        "name": "images",
+        "value": [
+          "name=carbonio-proxy,dockerfile=Dockerfile,title=Carbonio Proxy",
+          "name=carbonio-proxy-sidecar,dockerfile=Dockerfile-sidecar,title=Carbonio Proxy Sidecar"
+        ]
+      },
+      {
+        "name": "image-platforms",
+        "value": "linux/amd64,linux/arm64"
+      },
+      {
+        "name": "image-registry-override",
+        "value": "registry.dev.zextras.com/ci/tekton/test"
+      }
+    ]
+  },
+  "status": {
+    "startTime": "2026-11-07T17:58:17Z",
+    "completionTime": "2026-11-07T17:59:47Z",
+    "conditions": [
+      {
+        "lastTransitionTime": "2026-11-07T17:59:47Z",
+        "message": "Tasks Completed: 8 (Failed: 0, Cancelled 0), Skipped: 1",
+        "reason": "Completed",
+        "status": "True",
+        "type": "Succeeded"
+      }
+    ],
+    "childReferences": [
+      {
+        "apiVersion": "tekton.dev/v1",
+        "kind": "TaskRun",
+        "name": "carbonio-proxy-9fjnt-clone",
+        "pipelineTaskName": "clone"
+      },
+      {
+        "apiVersion": "tekton.dev/v1",
+        "kind": "TaskRun",
+        "name": "carbonio-proxy-9fjnt-metadata",
+        "pipelineTaskName": "metadata"
+      },
+      {
+        "apiVersion": "tekton.dev/v1",
+        "kind": "TaskRun",
+        "name": "carbonio-proxy-9fjnt-gitleaks",
+        "pipelineTaskName": "gitleaks"
+      },
+      {
+        "apiVersion": "tekton.dev/v1",
+        "kind": "TaskRun",
+        "name": "carbonio-proxy-9fjnt-diff",
+        "pipelineTaskName": "diff"
+      },
+      {
+        "apiVersion": "tekton.dev/v1",
+        "kind": "TaskRun",
+        "name": "carbonio-proxy-9fjnt-build-packages-0",
+        "pipelineTaskName": "build-packages",
+        "whenExpressions": [
+          {
+            "input": "false",
+            "operator": "notin",
+            "values": [
+              "no-changes"
+            ]
+          }
+        ]
+      },
+      {
+        "apiVersion": "tekton.dev/v1",
+        "kind": "TaskRun",
+        "name": "carbonio-proxy-9fjnt-build-packages-1",
+        "pipelineTaskName": "build-packages",
+        "whenExpressions": [
+          {
+            "input": "false",
+            "operator": "notin",
+            "values": [
+              "no-changes"
+            ]
+          }
+        ]
+      },
+      {
+        "apiVersion": "tekton.dev/v1",
+        "kind": "TaskRun",
+        "name": "carbonio-proxy-9fjnt-build-packages-2",
+        "pipelineTaskName": "build-packages",
+        "whenExpressions": [
+          {
+            "input": "false",
+            "operator": "notin",
+            "values": [
+              "no-changes"
+            ]
+          }
+        ]
+      },
+      {
+        "apiVersion": "tekton.dev/v1",
+        "kind": "TaskRun",
+        "name": "carbonio-proxy-9fjnt-build-packages-3",
+        "pipelineTaskName": "build-packages",
+        "whenExpressions": [
+          {
+            "input": "false",
+            "operator": "notin",
+            "values": [
+              "no-changes"
+            ]
+          }
+        ]
+      },
+      {
+        "apiVersion": "tekton.dev/v1",
+        "kind": "TaskRun",
+        "name": "carbonio-proxy-9fjnt-upload",
+        "pipelineTaskName": "upload",
+        "whenExpressions": [
+          {
+            "input": "true",
+            "operator": "in",
+            "values": [
+              "true"
+            ]
+          },
+          {
+            "input": "false",
+            "operator": "notin",
+            "values": [
+              "no-changes"
+            ]
+          }
+        ]
+      },
+      {
+        "apiVersion": "tekton.dev/v1",
+        "kind": "TaskRun",
+        "name": "carbonio-proxy-9fjnt-build-images-0",
+        "pipelineTaskName": "build-images"
+      },
+      {
+        "apiVersion": "tekton.dev/v1",
+        "kind": "TaskRun",
+        "name": "carbonio-proxy-9fjnt-build-images-1",
+        "pipelineTaskName": "build-images"
+      },
+      {
+        "apiVersion": "tekton.dev/v1",
+        "kind": "TaskRun",
+        "name": "carbonio-proxy-9fjnt-release",
+        "pipelineTaskName": "release",
+        "whenExpressions": [
+          {
+            "input": "true",
+            "operator": "in",
+            "values": [
+              "true"
+            ]
+          }
+        ]
+      }
+    ],
+    "skippedTasks": [
+      {
+        "name": "debuginfod",
+        "reason": "When Expressions evaluated to false",
+        "whenExpressions": [
+          {
+            "input": "false",
+            "operator": "in",
+            "values": [
+              "true"
+            ]
+          },
+          {
+            "input": "false",
+            "operator": "notin",
+            "values": [
+              "no-changes"
+            ]
+          }
+        ]
+      }
+    ],
+    "pipelineSpec": {
+      "params": [
+        {
+          "name": "repo-url",
+          "type": "string"
+        },
+        {
+          "name": "revision",
+          "type": "string"
+        },
+        {
+          "name": "source-branch",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "name": "target-branch",
+          "type": "string"
+        },
+        {
+          "name": "event-type",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "name": "pull-request-number",
+          "type": "string"
+        },
+        {
+          "name": "git-auth-secret",
+          "type": "string"
+        },
+        {
+          "default": ".gitleaks.toml",
+          "name": "gitleaks-config",
+          "type": "string"
+        },
+        {
+          "default": [
+            "docker.io/m0rf30/yap-ubuntu-jammy:2.7.6",
+            "docker.io/m0rf30/yap-ubuntu-noble:2.8.0",
+            "docker.io/m0rf30/yap-rocky-8:2.7.6",
+            "docker.io/m0rf30/yap-rocky-9:2.8.0"
+          ],
+          "name": "yap-images",
+          "type": "array"
+        },
+        {
+          "default": ".",
+          "name": "build-dirs",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "name": "diff-build-dirs",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "name": "previous-commit",
+          "type": "string"
+        },
+        {
+          "default": "false",
+          "name": "ubuntu-single-pkg",
+          "type": "string"
+        },
+        {
+          "default": "false",
+          "name": "rocky-single-pkg",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "name": "build-flags",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "name": "architecture",
+          "type": "string"
+        },
+        {
+          "default": "false",
+          "name": "prepare",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "name": "prepare-flags",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "name": "add-carbonio-repos",
+          "type": "string"
+        },
+        {
+          "default": "true",
+          "name": "use-default-excludes",
+          "type": "string"
+        },
+        {
+          "default": "false",
+          "name": "debug-symbols",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "name": "pre-build-script",
+          "type": "string"
+        },
+        {
+          "default": "true",
+          "name": "upload-packages",
+          "type": "string"
+        },
+        {
+          "default": "yap.json",
+          "name": "yap-paths",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "name": "upload-distros",
+          "type": "string"
+        },
+        {
+          "default": "{}",
+          "name": "exclusion-map",
+          "type": "string"
+        },
+        {
+          "default": "false",
+          "name": "playground",
+          "type": "string"
+        },
+        {
+          "default": "false",
+          "name": "debuginfod",
+          "type": "string"
+        },
+        {
+          "default": "false",
+          "name": "debuginfod-tag-only",
+          "type": "string"
+        },
+        {
+          "default": "debuginfod-ssh-key-unset",
+          "name": "debuginfod-ssh-key-secret",
+          "type": "string"
+        },
+        {
+          "default": [],
+          "name": "images",
+          "type": "array"
+        },
+        {
+          "default": "linux/amd64",
+          "name": "image-platforms",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "name": "image-registry-override",
+          "type": "string"
+        },
+        {
+          "default": "true",
+          "name": "semantic-release",
+          "type": "string"
+        },
+        {
+          "default": "true",
+          "name": "dry-run",
+          "type": "string"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "clone",
+          "params": [
+            {
+              "name": "repo-url",
+              "value": "https://github.com/zextras/carbonio-proxy"
+            },
+            {
+              "name": "revision",
+              "value": "41cd53e92af56d6f708133e56fe4297a9217b35b"
+            },
+            {
+              "name": "target-branch",
+              "value": "main"
+            }
+          ],
+          "workspaces": [
+            {
+              "name": "source",
+              "workspace": "source"
+            },
+            {
+              "name": "basic-auth",
+              "workspace": "basic-auth"
+            }
+          ]
+        },
+        {
+          "name": "metadata",
+          "params": [
+            {
+              "name": "source-branch",
+              "value": "ci/tekton-eval"
+            },
+            {
+              "name": "target-branch",
+              "value": "main"
+            },
+            {
+              "name": "event-type",
+              "value": "pull_request"
+            },
+            {
+              "name": "pull-request-number",
+              "value": "323"
+            },
+            {
+              "name": "revision",
+              "value": "41cd53e92af56d6f708133e56fe4297a9217b35b"
+            },
+            {
+              "name": "github-token-secret",
+              "value": "pac-gitauth-jlnyfd"
+            }
+          ],
+          "runAfter": [
+            "clone"
+          ],
+          "workspaces": [
+            {
+              "name": "source",
+              "workspace": "source"
+            },
+            {
+              "name": "basic-auth",
+              "workspace": "basic-auth"
+            }
+          ]
+        },
+        {
+          "name": "gitleaks",
+          "params": [
+            {
+              "name": "config-file",
+              "value": ".gitleaks.toml"
+            },
+            {
+              "name": "branch",
+              "value": "$(tasks.metadata.results.branch)"
+            },
+            {
+              "name": "tag-name",
+              "value": "$(tasks.metadata.results.tag-name)"
+            },
+            {
+              "name": "default-branch",
+              "value": "$(tasks.metadata.results.default-branch)"
+            },
+            {
+              "name": "is-default-branch",
+              "value": "$(tasks.metadata.results.is-default-branch)"
+            },
+            {
+              "name": "is-release-branch",
+              "value": "$(tasks.metadata.results.is-release-branch)"
+            },
+            {
+              "name": "target-branch",
+              "value": "$(tasks.metadata.results.target-branch)"
+            }
+          ],
+          "workspaces": [
+            {
+              "name": "source",
+              "workspace": "source"
+            },
+            {
+              "name": "basic-auth",
+              "workspace": "basic-auth"
+            }
+          ]
+        },
+        {
+          "name": "diff",
+          "params": [
+            {
+              "name": "build-dirs",
+              "value": ""
+            },
+            {
+              "name": "is-pr",
+              "value": "$(tasks.metadata.results.is-pr)"
+            },
+            {
+              "name": "target-branch",
+              "value": "$(tasks.metadata.results.target-branch)"
+            },
+            {
+              "name": "tag-name",
+              "value": "$(tasks.metadata.results.tag-name)"
+            },
+            {
+              "name": "branch",
+              "value": "$(tasks.metadata.results.branch)"
+            },
+            {
+              "name": "default-branch",
+              "value": "$(tasks.metadata.results.default-branch)"
+            },
+            {
+              "name": "previous-commit",
+              "value": ""
+            }
+          ],
+          "workspaces": [
+            {
+              "name": "source",
+              "workspace": "source"
+            }
+          ]
+        },
+        {
+          "matrix": {
+            "params": [
+              {
+                "name": "image",
+                "value": [
+                  "docker.io/m0rf30/yap-ubuntu-jammy:2.7.6",
+                  "docker.io/m0rf30/yap-ubuntu-noble:2.8.0",
+                  "docker.io/m0rf30/yap-rocky-8:2.7.6",
+                  "docker.io/m0rf30/yap-rocky-9:2.8.0"
+                ]
+              }
+            ]
+          },
+          "name": "build-packages",
+          "params": [
+            {
+              "name": "build-dirs",
+              "value": "."
+            },
+            {
+              "name": "build-flags",
+              "value": " -ds "
+            },
+            {
+              "name": "architecture",
+              "value": ""
+            },
+            {
+              "name": "prepare",
+              "value": "false"
+            },
+            {
+              "name": "prepare-flags",
+              "value": ""
+            },
+            {
+              "name": "add-carbonio-repos",
+              "value": ""
+            },
+            {
+              "name": "use-default-excludes",
+              "value": "false"
+            },
+            {
+              "name": "debug-symbols",
+              "value": "false"
+            },
+            {
+              "name": "pre-build-script",
+              "value": ""
+            },
+            {
+              "name": "timestamp",
+              "value": "$(tasks.metadata.results.build-timestamp)"
+            },
+            {
+              "name": "tag-name",
+              "value": "$(tasks.metadata.results.tag-name)"
+            },
+            {
+              "name": "diff-build",
+              "value": "$(tasks.diff.results.diff-build)"
+            },
+            {
+              "name": "diff-build-packages",
+              "value": "$(tasks.diff.results.diff-build-packages)"
+            },
+            {
+              "name": "repo-env",
+              "value": "$(tasks.diff.results.repo-env)"
+            },
+            {
+              "name": "ubuntu-single-pkg",
+              "value": "false"
+            },
+            {
+              "name": "rocky-single-pkg",
+              "value": "false"
+            }
+          ],
+          "runAfter": [
+            "gitleaks"
+          ],
+          "workspaces": [
+            {
+              "name": "source",
+              "workspace": "source"
+            }
+          ],
+          "when": [
+            {
+              "input": "$(tasks.diff.results.diff-build)",
+              "operator": "notin",
+              "values": [
+                "no-changes"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "upload",
+          "params": [
+            {
+              "name": "dry-run",
+              "value": "true"
+            },
+            {
+              "name": "playground",
+              "value": "false"
+            },
+            {
+              "name": "branch",
+              "value": "$(tasks.metadata.results.branch)"
+            },
+            {
+              "name": "tag",
+              "value": "$(tasks.metadata.results.tag)"
+            },
+            {
+              "name": "tag-name",
+              "value": "$(tasks.metadata.results.tag-name)"
+            },
+            {
+              "name": "is-default-branch",
+              "value": "$(tasks.metadata.results.is-default-branch)"
+            },
+            {
+              "name": "is-release-branch",
+              "value": "$(tasks.metadata.results.is-release-branch)"
+            },
+            {
+              "name": "repo-name",
+              "value": "$(tasks.metadata.results.repo-name)"
+            },
+            {
+              "name": "diff-build",
+              "value": "$(tasks.diff.results.diff-build)"
+            },
+            {
+              "name": "diff-build-packages",
+              "value": "$(tasks.diff.results.diff-build-packages)"
+            },
+            {
+              "name": "yap-paths",
+              "value": "yap.json"
+            },
+            {
+              "name": "exclusion-map",
+              "value": "{}"
+            },
+            {
+              "name": "distros",
+              "value": ""
+            },
+            {
+              "name": "architecture",
+              "value": ""
+            },
+            {
+              "name": "ubuntu-single-pkg",
+              "value": "false"
+            },
+            {
+              "name": "rocky-single-pkg",
+              "value": "false"
+            },
+            {
+              "name": "build-number",
+              "value": "carbonio-proxy-9fjnt"
+            }
+          ],
+          "runAfter": [
+            "build-packages"
+          ],
+          "workspaces": [
+            {
+              "name": "source",
+              "workspace": "source"
+            }
+          ],
+          "when": [
+            {
+              "input": "true",
+              "operator": "in",
+              "values": [
+                "true"
+              ]
+            },
+            {
+              "input": "$(tasks.diff.results.diff-build)",
+              "operator": "notin",
+              "values": [
+                "no-changes"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "debuginfod",
+          "params": [
+            {
+              "name": "dry-run",
+              "value": "true"
+            },
+            {
+              "name": "repo-name",
+              "value": "$(tasks.metadata.results.repo-name)"
+            },
+            {
+              "name": "tag-name",
+              "value": "$(tasks.metadata.results.tag-name)"
+            },
+            {
+              "name": "commit",
+              "value": "$(tasks.metadata.results.commit)"
+            },
+            {
+              "name": "tag-only",
+              "value": "false"
+            },
+            {
+              "name": "architecture",
+              "value": ""
+            },
+            {
+              "name": "ubuntu-single-pkg",
+              "value": "false"
+            },
+            {
+              "name": "rocky-single-pkg",
+              "value": "false"
+            },
+            {
+              "name": "ssh-key-secret",
+              "value": "debuginfod-ssh-key-unset"
+            }
+          ],
+          "runAfter": [
+            "build-packages"
+          ],
+          "workspaces": [
+            {
+              "name": "source",
+              "workspace": "source"
+            }
+          ],
+          "when": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "true"
+              ]
+            },
+            {
+              "input": "$(tasks.diff.results.diff-build)",
+              "operator": "notin",
+              "values": [
+                "no-changes"
+              ]
+            }
+          ]
+        },
+        {
+          "matrix": {
+            "params": [
+              {
+                "name": "image-spec",
+                "value": [
+                  "name=carbonio-proxy,dockerfile=Dockerfile,title=Carbonio Proxy",
+                  "name=carbonio-proxy-sidecar,dockerfile=Dockerfile-sidecar,title=Carbonio Proxy Sidecar"
+                ]
+              }
+            ]
+          },
+          "name": "build-images",
+          "params": [
+            {
+              "name": "platforms",
+              "value": "linux/amd64,linux/arm64"
+            },
+            {
+              "name": "registry-override",
+              "value": "registry.dev.zextras.com/ci/tekton/test"
+            },
+            {
+              "name": "commit",
+              "value": "$(tasks.metadata.results.commit)"
+            },
+            {
+              "name": "commit-short",
+              "value": "$(tasks.metadata.results.commit-short)"
+            },
+            {
+              "name": "branch",
+              "value": "$(tasks.metadata.results.branch)"
+            },
+            {
+              "name": "tag-name",
+              "value": "$(tasks.metadata.results.tag-name)"
+            },
+            {
+              "name": "is-default-branch",
+              "value": "$(tasks.metadata.results.is-default-branch)"
+            },
+            {
+              "name": "repo-org",
+              "value": "$(tasks.metadata.results.repo-org)"
+            },
+            {
+              "name": "repo-name",
+              "value": "$(tasks.metadata.results.repo-name)"
+            },
+            {
+              "name": "github-token-secret",
+              "value": "pac-gitauth-jlnyfd"
+            }
+          ],
+          "runAfter": [
+            "gitleaks"
+          ],
+          "workspaces": [
+            {
+              "name": "source",
+              "workspace": "source"
+            }
+          ]
+        },
+        {
+          "name": "release",
+          "params": [
+            {
+              "name": "branch",
+              "value": "$(tasks.metadata.results.branch)"
+            },
+            {
+              "name": "default-branch",
+              "value": "$(tasks.metadata.results.default-branch)"
+            },
+            {
+              "name": "is-release-branch",
+              "value": "$(tasks.metadata.results.is-release-branch)"
+            },
+            {
+              "name": "tag-name",
+              "value": "$(tasks.metadata.results.tag-name)"
+            },
+            {
+              "name": "is-pr",
+              "value": "$(tasks.metadata.results.is-pr)"
+            },
+            {
+              "name": "pr-number",
+              "value": "$(tasks.metadata.results.pr-number)"
+            },
+            {
+              "name": "commit-email",
+              "value": "$(tasks.metadata.results.commit-email)"
+            },
+            {
+              "name": "commit-subject",
+              "value": "$(tasks.metadata.results.commit-subject)"
+            },
+            {
+              "name": "dry-run",
+              "value": "true"
+            },
+            {
+              "name": "github-token-secret",
+              "value": "pac-gitauth-jlnyfd"
+            }
+          ],
+          "runAfter": [
+            "upload",
+            "debuginfod",
+            "build-images"
+          ],
+          "workspaces": [
+            {
+              "name": "source",
+              "workspace": "source"
+            }
+          ],
+          "when": [
+            {
+              "input": "true",
+              "operator": "in",
+              "values": [
+                "true"
+              ]
+            }
+          ]
+        }
+      ],
+      "finally": null
+    }
+  }
+}

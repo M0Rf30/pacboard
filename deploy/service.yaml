@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: The pacboard Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: pacboard
+  labels:
+    app.kubernetes.io/name: pacboard
+spec:
+  selector:
+    app.kubernetes.io/name: pacboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

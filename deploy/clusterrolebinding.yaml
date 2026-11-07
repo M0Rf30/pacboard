@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: The pacboard Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pacboard
+  labels:
+    app.kubernetes.io/name: pacboard
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pacboard
+subjects:
+  - kind: ServiceAccount
+    name: pacboard
+    namespace: pacboard

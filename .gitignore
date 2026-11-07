@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: The pacboard Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Compiled binaries (anchored so cmd/pacboard/ is not matched)
+/pacboard
+/bin/
+
+# Go
+*.exe
+*.test
+*.out
+*.prof
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Logs / scratch
+*.log
+tmp/
+.tmp/
+
+# Environment
+.env
+.env.local
+.envrc
+web/.env*.local
+
+# Web (frontend) build and tooling
+web/node_modules/
+web/.vite/
+web/coverage/
+# Vite build output. Only the empty .gitkeep is tracked so `//go:embed all:dist` compiles on a
+# fresh clone without building the UI (vite.config.ts restores it after emptying the directory).
+web/dist/*
+!web/dist/.gitkeep

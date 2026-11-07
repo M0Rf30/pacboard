@@ -1,0 +1,21 @@
+version = 1
+SPDX-PackageName = "pacboard"
+SPDX-PackageSupplier = "The pacboard Authors"
+SPDX-PackageDownloadLocation = "https://github.com/M0Rf30/pacboard"
+
+# Files that cannot carry a comment header: lockfiles, JSON manifests and tsconfigs, the build
+# output, empty placeholders, and recorded real-cluster JSON used as test fixtures.
+[[annotations]]
+path = [
+  "go.sum",
+  "web/bun.lock",
+  "web/package.json",
+  "web/tsconfig.json",
+  "web/tsconfig.app.json",
+  "web/tsconfig.node.json",
+  "web/dist/**",
+  "internal/dag/testdata/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "The pacboard Authors"
+SPDX-License-Identifier = "AGPL-3.0-or-later"

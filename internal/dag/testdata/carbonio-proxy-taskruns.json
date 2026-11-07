@@ -1,0 +1,502 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "tekton.dev/v1",
+      "kind": "TaskRun",
+      "metadata": {
+        "name": "carbonio-proxy-9fjnt-build-images-0",
+        "namespace": "tekton-ci",
+        "labels": {
+          "tekton.dev/pipelineRun": "carbonio-proxy-9fjnt",
+          "tekton.dev/pipelineTask": "build-images"
+        }
+      },
+      "status": {
+        "podName": "carbonio-proxy-9fjnt-build-images-0-pod",
+        "startTime": "2026-11-07T17:58:39Z",
+        "completionTime": "2026-11-07T17:59:35Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-11-07T17:59:35Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "steps": [
+          {
+            "name": "build-and-push",
+            "container": "step-build-and-push",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:43Z",
+              "finishedAt": "2026-11-07T17:59:34Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "tekton.dev/v1",
+      "kind": "TaskRun",
+      "metadata": {
+        "name": "carbonio-proxy-9fjnt-build-images-1",
+        "namespace": "tekton-ci",
+        "labels": {
+          "tekton.dev/pipelineRun": "carbonio-proxy-9fjnt",
+          "tekton.dev/pipelineTask": "build-images"
+        }
+      },
+      "status": {
+        "podName": "carbonio-proxy-9fjnt-build-images-1-pod",
+        "startTime": "2026-11-07T17:58:39Z",
+        "completionTime": "2026-11-07T17:59:08Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-11-07T17:59:08Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "steps": [
+          {
+            "name": "build-and-push",
+            "container": "step-build-and-push",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:44Z",
+              "finishedAt": "2026-11-07T17:59:07Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "tekton.dev/v1",
+      "kind": "TaskRun",
+      "metadata": {
+        "name": "carbonio-proxy-9fjnt-build-packages-0",
+        "namespace": "tekton-ci",
+        "labels": {
+          "tekton.dev/pipelineRun": "carbonio-proxy-9fjnt",
+          "tekton.dev/pipelineTask": "build-packages"
+        }
+      },
+      "status": {
+        "podName": "carbonio-proxy-9fjnt-build-packages-0-pod",
+        "startTime": "2026-11-07T17:58:41Z",
+        "completionTime": "2026-11-07T17:58:48Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-11-07T17:58:48Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "steps": [
+          {
+            "name": "build",
+            "container": "step-build",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:46Z",
+              "finishedAt": "2026-11-07T17:58:46Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "tekton.dev/v1",
+      "kind": "TaskRun",
+      "metadata": {
+        "name": "carbonio-proxy-9fjnt-build-packages-1",
+        "namespace": "tekton-ci",
+        "labels": {
+          "tekton.dev/pipelineRun": "carbonio-proxy-9fjnt",
+          "tekton.dev/pipelineTask": "build-packages"
+        }
+      },
+      "status": {
+        "podName": "carbonio-proxy-9fjnt-build-packages-1-pod",
+        "startTime": "2026-11-07T17:58:41Z",
+        "completionTime": "2026-11-07T17:58:45Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-11-07T17:58:45Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "steps": [
+          {
+            "name": "build",
+            "container": "step-build",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:44Z",
+              "finishedAt": "2026-11-07T17:58:44Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "tekton.dev/v1",
+      "kind": "TaskRun",
+      "metadata": {
+        "name": "carbonio-proxy-9fjnt-build-packages-2",
+        "namespace": "tekton-ci",
+        "labels": {
+          "tekton.dev/pipelineRun": "carbonio-proxy-9fjnt",
+          "tekton.dev/pipelineTask": "build-packages"
+        }
+      },
+      "status": {
+        "podName": "carbonio-proxy-9fjnt-build-packages-2-pod",
+        "startTime": "2026-11-07T17:58:41Z",
+        "completionTime": "2026-11-07T17:58:48Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-11-07T17:58:48Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "steps": [
+          {
+            "name": "build",
+            "container": "step-build",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:46Z",
+              "finishedAt": "2026-11-07T17:58:46Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "tekton.dev/v1",
+      "kind": "TaskRun",
+      "metadata": {
+        "name": "carbonio-proxy-9fjnt-build-packages-3",
+        "namespace": "tekton-ci",
+        "labels": {
+          "tekton.dev/pipelineRun": "carbonio-proxy-9fjnt",
+          "tekton.dev/pipelineTask": "build-packages"
+        }
+      },
+      "status": {
+        "podName": "carbonio-proxy-9fjnt-build-packages-3-pod",
+        "startTime": "2026-11-07T17:58:41Z",
+        "completionTime": "2026-11-07T17:58:47Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-11-07T17:58:47Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "steps": [
+          {
+            "name": "build",
+            "container": "step-build",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:46Z",
+              "finishedAt": "2026-11-07T17:58:46Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "tekton.dev/v1",
+      "kind": "TaskRun",
+      "metadata": {
+        "name": "carbonio-proxy-9fjnt-clone",
+        "namespace": "tekton-ci",
+        "labels": {
+          "tekton.dev/pipelineRun": "carbonio-proxy-9fjnt",
+          "tekton.dev/pipelineTask": "clone"
+        }
+      },
+      "status": {
+        "podName": "carbonio-proxy-9fjnt-clone-pod",
+        "startTime": "2026-11-07T17:58:17Z",
+        "completionTime": "2026-11-07T17:58:27Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-11-07T17:58:27Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "steps": [
+          {
+            "name": "clone",
+            "container": "step-clone",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:25Z",
+              "finishedAt": "2026-11-07T17:58:27Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "tekton.dev/v1",
+      "kind": "TaskRun",
+      "metadata": {
+        "name": "carbonio-proxy-9fjnt-diff",
+        "namespace": "tekton-ci",
+        "labels": {
+          "tekton.dev/pipelineRun": "carbonio-proxy-9fjnt",
+          "tekton.dev/pipelineTask": "diff"
+        }
+      },
+      "status": {
+        "podName": "carbonio-proxy-9fjnt-diff-pod",
+        "startTime": "2026-11-07T17:58:34Z",
+        "completionTime": "2026-11-07T17:58:41Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-11-07T17:58:41Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "steps": [
+          {
+            "name": "detect",
+            "container": "step-detect",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:40Z",
+              "finishedAt": "2026-11-07T17:58:40Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "tekton.dev/v1",
+      "kind": "TaskRun",
+      "metadata": {
+        "name": "carbonio-proxy-9fjnt-gitleaks",
+        "namespace": "tekton-ci",
+        "labels": {
+          "tekton.dev/pipelineRun": "carbonio-proxy-9fjnt",
+          "tekton.dev/pipelineTask": "gitleaks"
+        }
+      },
+      "status": {
+        "podName": "carbonio-proxy-9fjnt-gitleaks-pod",
+        "startTime": "2026-11-07T17:58:34Z",
+        "completionTime": "2026-11-07T17:58:39Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-11-07T17:58:39Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "steps": [
+          {
+            "name": "scan",
+            "container": "step-scan",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:38Z",
+              "finishedAt": "2026-11-07T17:58:38Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "tekton.dev/v1",
+      "kind": "TaskRun",
+      "metadata": {
+        "name": "carbonio-proxy-9fjnt-metadata",
+        "namespace": "tekton-ci",
+        "labels": {
+          "tekton.dev/pipelineRun": "carbonio-proxy-9fjnt",
+          "tekton.dev/pipelineTask": "metadata"
+        }
+      },
+      "status": {
+        "podName": "carbonio-proxy-9fjnt-metadata-pod",
+        "startTime": "2026-11-07T17:58:28Z",
+        "completionTime": "2026-11-07T17:58:34Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-11-07T17:58:34Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "steps": [
+          {
+            "name": "metadata",
+            "container": "step-metadata",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:31Z",
+              "finishedAt": "2026-11-07T17:58:32Z"
+            }
+          },
+          {
+            "name": "check-pr-open",
+            "container": "step-check-pr-open",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:33Z",
+              "finishedAt": "2026-11-07T17:58:33Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "tekton.dev/v1",
+      "kind": "TaskRun",
+      "metadata": {
+        "name": "carbonio-proxy-9fjnt-release",
+        "namespace": "tekton-ci",
+        "labels": {
+          "tekton.dev/pipelineRun": "carbonio-proxy-9fjnt",
+          "tekton.dev/pipelineTask": "release"
+        }
+      },
+      "status": {
+        "podName": "carbonio-proxy-9fjnt-release-pod",
+        "startTime": "2026-11-07T17:59:42Z",
+        "completionTime": "2026-11-07T17:59:47Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-11-07T17:59:47Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "steps": [
+          {
+            "name": "guard",
+            "container": "step-guard",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:59:46Z",
+              "finishedAt": "2026-11-07T17:59:46Z"
+            }
+          },
+          {
+            "name": "release",
+            "container": "step-release",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:59:46Z",
+              "finishedAt": "2026-11-07T17:59:46Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "tekton.dev/v1",
+      "kind": "TaskRun",
+      "metadata": {
+        "name": "carbonio-proxy-9fjnt-upload",
+        "namespace": "tekton-ci",
+        "labels": {
+          "tekton.dev/pipelineRun": "carbonio-proxy-9fjnt",
+          "tekton.dev/pipelineTask": "upload"
+        }
+      },
+      "status": {
+        "podName": "carbonio-proxy-9fjnt-upload-pod",
+        "startTime": "2026-11-07T17:58:48Z",
+        "completionTime": "2026-11-07T17:58:56Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-11-07T17:58:56Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "steps": [
+          {
+            "name": "plan",
+            "container": "step-plan",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:54Z",
+              "finishedAt": "2026-11-07T17:58:54Z"
+            }
+          },
+          {
+            "name": "artifactory",
+            "container": "step-artifactory",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:54Z",
+              "finishedAt": "2026-11-07T17:58:54Z"
+            }
+          },
+          {
+            "name": "nexus",
+            "container": "step-nexus",
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-11-07T17:58:54Z",
+              "finishedAt": "2026-11-07T17:58:55Z"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

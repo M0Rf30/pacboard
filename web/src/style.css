@@ -1,0 +1,99 @@
+/*
+ * SPDX-FileCopyrightText: The pacboard Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* ANSI palette (log viewer), light theme. */
+  --ansi-0: #24292f;
+  --ansi-1: #cf222e;
+  --ansi-2: #1a7f37;
+  --ansi-3: #9a6700;
+  --ansi-4: #0969da;
+  --ansi-5: #8250df;
+  --ansi-6: #1b7c83;
+  --ansi-7: #6e7781;
+  --ansi-8: #57606a;
+  --ansi-9: #a40e26;
+  --ansi-10: #116329;
+  --ansi-11: #7d4e00;
+  --ansi-12: #0550ae;
+  --ansi-13: #6639ba;
+  --ansi-14: #3192aa;
+  --ansi-15: #8c959f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ansi-0: #6e7681;
+    --ansi-1: #ff7b72;
+    --ansi-2: #56d364;
+    --ansi-3: #e3b341;
+    --ansi-4: #79c0ff;
+    --ansi-5: #d2a8ff;
+    --ansi-6: #56d4dd;
+    --ansi-7: #b1bac4;
+    --ansi-8: #8b949e;
+    --ansi-9: #ffa198;
+    --ansi-10: #7ee787;
+    --ansi-11: #f2cc60;
+    --ansi-12: #a5d6ff;
+    --ansi-13: #e2c5ff;
+    --ansi-14: #b3f0ff;
+    --ansi-15: #f0f6fc;
+  }
+}
+
+body {
+  @apply bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.ansi-bold { font-weight: 700; }
+.ansi-dim { opacity: 0.65; }
+.ansi-italic { font-style: italic; }
+.ansi-underline { text-decoration: underline; }
+.ansi-fg-0 { color: var(--ansi-0); } .ansi-bg-0 { background-color: var(--ansi-0); }
+.ansi-fg-1 { color: var(--ansi-1); } .ansi-bg-1 { background-color: var(--ansi-1); }
+.ansi-fg-2 { color: var(--ansi-2); } .ansi-bg-2 { background-color: var(--ansi-2); }
+.ansi-fg-3 { color: var(--ansi-3); } .ansi-bg-3 { background-color: var(--ansi-3); }
+.ansi-fg-4 { color: var(--ansi-4); } .ansi-bg-4 { background-color: var(--ansi-4); }
+.ansi-fg-5 { color: var(--ansi-5); } .ansi-bg-5 { background-color: var(--ansi-5); }
+.ansi-fg-6 { color: var(--ansi-6); } .ansi-bg-6 { background-color: var(--ansi-6); }
+.ansi-fg-7 { color: var(--ansi-7); } .ansi-bg-7 { background-color: var(--ansi-7); }
+.ansi-fg-8 { color: var(--ansi-8); } .ansi-bg-8 { background-color: var(--ansi-8); }
+.ansi-fg-9 { color: var(--ansi-9); } .ansi-bg-9 { background-color: var(--ansi-9); }
+.ansi-fg-10 { color: var(--ansi-10); } .ansi-bg-10 { background-color: var(--ansi-10); }
+.ansi-fg-11 { color: var(--ansi-11); } .ansi-bg-11 { background-color: var(--ansi-11); }
+.ansi-fg-12 { color: var(--ansi-12); } .ansi-bg-12 { background-color: var(--ansi-12); }
+.ansi-fg-13 { color: var(--ansi-13); } .ansi-bg-13 { background-color: var(--ansi-13); }
+.ansi-fg-14 { color: var(--ansi-14); } .ansi-bg-14 { background-color: var(--ansi-14); }
+.ansi-fg-15 { color: var(--ansi-15); } .ansi-bg-15 { background-color: var(--ansi-15); }
+
+/* Task graph: running nodes get marching dashes, switched off for reduced motion. */
+@keyframes graph-march {
+  to { stroke-dashoffset: -24; }
+}
+.graph-running {
+  stroke-dasharray: 8 4;
+  animation: graph-march 1.2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .graph-running { animation: none; }
+  .animate-pulse { animation: none; }
+}

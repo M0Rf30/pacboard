@@ -1,0 +1,146 @@
+# SPDX-FileCopyrightText: The pacboard Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+version: "2"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+    - golines
+  settings:
+    golines:
+      max-len: 140
+      reformat-tags: false
+  exclusions:
+    generated: lax
+    paths:
+      - web/
+
+linters:
+  default: all
+  disable:
+    # Style preferences we don't enforce
+    - exhaustruct
+    - exhaustruct_v5
+    - funlen
+    - gomodguard
+    - gocognit
+    - goconst
+    - ireturn
+    - mnd
+    - musttag
+    - paralleltest
+    - prealloc
+    - revive
+    - wrapcheck
+    - wsl
+    - wsl_v5
+    - nlreturn
+    - testpackage
+    - varnamelen
+    - depguard
+    - forbidigo
+    - inamedparam
+    - gosmopolitan
+    - exhaustive
+    - copyloopvar
+    - intrange
+    - iface
+    - noinlineerr
+    - recvcheck
+    - usetesting
+    - maintidx
+    - contextcheck
+    - funcorder
+    - err113 # config and validation errors are one-off messages, not an error API
+    - gochecknoglobals # ldflags version variables and the fixed GVR table
+
+  settings:
+    cyclop:
+      max-complexity: 20
+
+    dupl:
+      threshold: 200
+
+    nestif:
+      min-complexity: 10
+
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+
+    gocritic:
+      disabled-checks:
+        - appendAssign
+
+    lll:
+      line-length: 140
+
+    gocyclo:
+      min-complexity: 20
+
+    godot:
+      scope: declarations
+
+    # docs/api.md is the contract: the wire format is camelCase.
+    tagliatelle:
+      case:
+        rules:
+          json: camel
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: "_test\\.go"
+        linters:
+          - dupl
+          - lll
+          - godot
+          - errcheck
+          - err113
+          - gosec
+          - nilnil
+          - unparam
+          - errchkjson
+          - forcetypeassert
+          - gochecknoglobals
+          - cyclop
+          - gocyclo
+          - nestif
+          - bodyclose
+          - noctx
+          - perfsprint
+      # A trailing //nolint explanation cannot be wrapped, and URLs in comments are unsplittable
+      - source: "//nolint:|https?://"
+        linters:
+          - lll
+      # Main entrypoints can be longer and more complex
+      - path: "^cmd/"
+        linters:
+          - cyclop
+          - gocyclo
+      # The GitHub REST and OAuth payloads use snake_case names fixed by GitHub
+      - path: "^internal/(github|auth)/"
+        linters:
+          - tagliatelle
+      # Service.setCookie adds Secure (https public URL) and SameSite=Lax to every cookie; the CSRF
+      # cookie is deliberately readable by the SPA (double-submit)
+      - path: "^internal/auth/auth\\.go$"
+        linters:
+          - gosec
+        text: "G124"
+      # Kubernetes unstructured objects are untyped maps
+      - path: "^internal/(model|dag|kube)/"
+        linters:
+          - forcetypeassert
+
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 10

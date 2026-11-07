@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: The pacboard Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Read-only. pacboard never writes to the cluster; reruns are PR comments posted to GitHub.
+# Pods are not readable on purpose (their specs can carry environment values): only their logs are.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pacboard
+  labels:
+    app.kubernetes.io/name: pacboard
+rules:
+  - apiGroups: ["pipelinesascode.tekton.dev"]
+    resources: ["repositories"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns", "taskruns", "pipelines"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]

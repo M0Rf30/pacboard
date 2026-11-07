@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: The pacboard Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pacboard
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
