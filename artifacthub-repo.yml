@@ -3,9 +3,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 # Artifact Hub repository metadata, pushed to oci://ghcr.io/m0rf30/charts/pacboard:artifacthub.io
-# by the release workflow. Fill repositoryID after adding the repository on artifacthub.io to get
-# the Verified Publisher badge.
-repositoryID: ""
+# by the release workflow. repositoryID ties it to the Artifact Hub entry (Verified Publisher).
+repositoryID: 32d31001-eb2e-4526-9710-b5d4a7527f86
 owners:
   - name: M0Rf30
     email: morf3089@gmail.com
