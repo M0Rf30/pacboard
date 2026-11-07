@@ -8,6 +8,7 @@ import RepoRunsPage from './pages/RepoRunsPage.vue'
 import AllRunsPage from './pages/AllRunsPage.vue'
 import RunDetailPage from './pages/RunDetailPage.vue'
 import NotFoundPage from './pages/NotFoundPage.vue'
+import { legacyDashboardTarget } from './lib/legacy'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -19,4 +20,10 @@ export const router = createRouter({
     { path: '/:rest(.*)*', name: 'not-found', component: NotFoundPage, meta: { title: 'Not found' } },
   ],
   scrollBehavior: (to, from) => (to.path === from.path ? false : { top: 0 }),
+})
+
+// Links to the Tekton Dashboard (hash routes) left in old GitHub check runs open the same run here.
+router.beforeEach((to) => {
+  const legacy = to.path === '/' ? legacyDashboardTarget(to.hash) : null
+  return legacy ? { path: legacy.path, query: legacy.query, hash: '', replace: true } : true
 })
