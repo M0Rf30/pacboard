@@ -7,101 +7,98 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { GraphNode } from '@/api/types'
+import { useNow } from '@/composables/useNow'
+import { elapsedSeconds, formatDuration } from '@/lib/format'
 import Duration from './Duration.vue'
-import LogViewer from './LogViewer.vue'
+import LogViewer, { type FocusRequest } from './LogViewer.vue'
 import StatusBadge from './StatusBadge.vue'
+import StepTimeline from './StepTimeline.vue'
 
 const props = defineProps<{
   namespace: string
   run: string
   node: GraphNode
-  /** Selected matrix TaskRun ("" = first). */
-  taskRun: string
-  /** Selected step ("" = all steps). */
+  /** Selected step name; "" = all steps. */
   step: string
+  /** Selected matrix TaskRun; "" = the first one. */
+  taskRun: string
+  focus: FocusRequest | null
 }>()
-const emit = defineEmits<{ 'update:taskRun': [name: string]; 'update:step': [name: string] }>()
+const highlight = defineModel<number | null>('highlight', { default: null })
+defineEmits<{ 'update:step': [step: string]; 'update:taskRun': [name: string] }>()
 
-const effectiveTaskRun = computed(() => props.taskRun || props.node.taskRunNames[0] || props.node.taskRunName)
-const isFirstTaskRun = computed(() => effectiveTaskRun.value === (props.node.taskRunNames[0] ?? props.node.taskRunName))
-const stepNames = computed(() => new Set(props.node.steps.map((s) => s.name)))
-// The API lists the steps of the first TaskRun only, so a step filter applies to that one.
-const step = computed(() => (isFirstTaskRun.value && stepNames.value.has(props.step) ? props.step : ''))
-const active = computed(() => props.node.taskRunName !== '' && props.node.status !== 'Pending' && props.node.status !== 'Skipped')
-const follow = computed(() => props.node.status === 'Running')
+const now = useNow()
 
-function selectStep(name: string): void {
-  emit('update:step', name)
-}
-
-const stepBtn =
-  'flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-800'
+const skipped = computed(() => props.node.status === 'Skipped')
+const selectedStep = computed(() => props.node.steps.find((s) => s.name === props.step))
+const stepDidNotRun = computed(() => selectedStep.value?.status === 'Pending')
+const active = computed(() => props.node.status !== 'Pending')
+// Stream only what is still being written: the task while it runs, or its running step.
+const follow = computed(() => props.node.status === 'Running' && (props.step === '' || selectedStep.value?.status === 'Running'))
+const taskRunName = computed(() => props.taskRun || props.node.taskRunNames[0] || props.node.taskRunName)
+const stepSeconds = computed(() => {
+  const s = selectedStep.value
+  return s ? elapsedSeconds(s.startTime, s.completionTime, now.value) : null
+})
+// "Succeeded" needs no explanation next to the badge; a reason like "Failed" or "TaskRunTimeout" does.
+const reason = computed(() => (props.node.reason && props.node.reason !== props.node.status ? props.node.reason : ''))
 </script>
 
 <template>
-  <section class="mt-4 rounded border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900" aria-label="Selected task">
-    <header class="mb-3 flex flex-wrap items-center gap-3">
-      <h2 class="text-base font-semibold">{{ node.id }}</h2>
-      <StatusBadge :status="node.status" :reason="node.reason" />
-      <span v-if="node.finally" class="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-800">finally</span>
-      <span v-if="node.matrixCount > 1" class="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-800">matrix ×{{ node.matrixCount }}</span>
-      <span v-if="node.reason" class="text-sm text-gray-600 dark:text-gray-400">{{ node.reason }}</span>
-      <span class="ml-auto text-sm text-gray-600 dark:text-gray-400">
-        Duration
-        <Duration :start="node.startTime" :end="node.completionTime" :status="node.status" />
-      </span>
-    </header>
-
-    <div v-if="node.taskRunNames.length > 1" class="mb-3">
-      <label class="flex items-center gap-2 text-sm">
-        Matrix TaskRun
+  <section class="panel" aria-label="Task details">
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-3">
+      <h2 class="font-mono text-md">{{ node.id }}</h2>
+      <StatusBadge :status="node.status" />
+      <span v-if="node.matrixCount > 1" class="tag">matrix ×{{ node.matrixCount }}</span>
+      <span v-if="node.finally" class="tag">finally</span>
+      <span v-if="reason" class="text-muted text-sm">{{ reason }}</span>
+      <span class="flex-1" />
+      <template v-if="node.taskRunNames.length > 1">
+        <label class="text-muted text-sm" for="taskrun-select">TaskRun</label>
         <select
-          class="rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-900"
-          :value="effectiveTaskRun"
-          @change="emit('update:taskRun', ($event.target as HTMLSelectElement).value)"
+          id="taskrun-select"
+          class="input !h-7"
+          :value="taskRunName"
+          @change="$emit('update:taskRun', ($event.target as HTMLSelectElement).value)"
         >
-          <option v-for="(n, i) in node.taskRunNames" :key="n" :value="n">#{{ i + 1 }} · {{ n }}</option>
+          <option v-for="(t, i) in node.taskRunNames" :key="t" :value="t">#{{ i + 1 }} · {{ t }}</option>
         </select>
-      </label>
+      </template>
+      <span v-if="!skipped && node.startTime" class="text-muted font-mono text-sm"><Duration :start="node.startTime" :end="node.completionTime" :status="node.status" /></span>
     </div>
 
-    <p v-if="node.taskRunName === ''" class="text-sm text-gray-600 dark:text-gray-400">
-      {{ node.status === 'Skipped' ? 'This task was skipped' : 'This task has no TaskRun yet' }}{{ node.reason ? ` (${node.reason})` : '' }}.
-    </p>
+    <div v-if="skipped" class="text-muted px-5 py-6">
+      <b class="text-text mb-1 block text-md">This task was skipped</b>
+      {{ node.reason || 'Its condition was not met' }}. No TaskRun was created, so there are no steps or logs.
+    </div>
 
-    <div v-else class="grid gap-3 lg:grid-cols-[16rem_1fr]">
-      <nav aria-label="Steps">
-        <h3 class="mb-1 px-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Steps</h3>
-        <ul v-if="isFirstTaskRun" class="space-y-0.5">
-          <li>
-            <button type="button" :class="[stepBtn, { 'bg-gray-100 font-medium dark:bg-gray-800': step === '' }]" :aria-pressed="step === ''" @click="selectStep('')">All steps</button>
-          </li>
-          <li v-for="s in node.steps" :key="s.name">
-            <button
-              type="button"
-              :class="[stepBtn, { 'bg-gray-100 font-medium dark:bg-gray-800': step === s.name }]"
-              :aria-pressed="step === s.name"
-              :title="s.reason"
-              @click="selectStep(s.name)"
-            >
-              <span class="min-w-0 grow truncate">{{ s.name }}</span>
-              <StatusBadge :status="s.status" />
-              <Duration :start="s.startTime" :end="s.completionTime" :status="s.status" class="w-14 text-right text-xs text-gray-600 dark:text-gray-400" />
-            </button>
-          </li>
-        </ul>
-        <p v-else class="px-2 text-sm text-gray-600 dark:text-gray-400">Per-step details are shown for the first TaskRun; this log has all steps.</p>
-      </nav>
-
-      <LogViewer
-        :namespace="namespace"
-        :run="run"
-        :task="node.id"
-        :task-run="isFirstTaskRun ? '' : effectiveTaskRun"
-        :step="step"
-        :active="active"
-        :follow="follow"
-      />
+    <div v-else class="split">
+      <StepTimeline :node="node" :selected="step" @select="(s) => $emit('update:step', s)" />
+      <div class="min-w-0">
+        <div v-if="stepDidNotRun" class="text-muted px-5 py-6">
+          <b class="text-text mb-1 block text-md">This step did not run</b>
+          An earlier step in <span class="font-mono">{{ node.id }}</span> failed, so Tekton never started it.
+        </div>
+        <LogViewer
+          v-else
+          v-model:highlight="highlight"
+          :namespace="namespace"
+          :run="run"
+          :task="node.id"
+          :task-run="taskRunName"
+          :step="step"
+          :active="active"
+          :follow="follow"
+          :focus="focus"
+        >
+          <template #footer>
+            <span v-if="selectedStep">step <span class="text-text">{{ selectedStep.name }}</span></span>
+            <span v-else>all steps</span>
+            <span v-if="selectedStep?.status === 'Failed' && selectedStep.exitCode !== null" class="text-fail">exit code {{ selectedStep.exitCode }}</span>
+            <span v-if="selectedStep && selectedStep.startTime">{{ formatDuration(stepSeconds) }}</span>
+          </template>
+        </LogViewer>
+      </div>
     </div>
   </section>
 </template>

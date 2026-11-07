@@ -6,6 +6,7 @@
 package logs
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -29,9 +30,18 @@ var (
 
 const defaultPoll = time.Second
 
+// OpenOptions select what part of a container log to read.
+type OpenOptions struct {
+	Follow bool
+	// LimitBytes stops the stream after this many bytes from the start (0 = no limit).
+	LimitBytes int64
+	// TailLines starts at that many lines from the end (0 = from the beginning).
+	TailLines int64
+}
+
 // PodLogs opens the log of one container.
 type PodLogs interface {
-	Open(ctx context.Context, namespace, pod, container string, follow bool) (io.ReadCloser, error)
+	Open(ctx context.Context, namespace, pod, container string, o OpenOptions) (io.ReadCloser, error)
 }
 
 // TaskRuns looks a TaskRun up; the informer store implements it.
@@ -43,8 +53,17 @@ type TaskRuns interface {
 type Kubernetes struct{ Client kubernetes.Interface }
 
 // Open implements PodLogs.
-func (k Kubernetes) Open(ctx context.Context, namespace, pod, container string, follow bool) (io.ReadCloser, error) {
-	rc, err := k.Client.CoreV1().Pods(namespace).GetLogs(pod, &corev1.PodLogOptions{Container: container, Follow: follow}).Stream(ctx)
+func (k Kubernetes) Open(ctx context.Context, namespace, pod, container string, o OpenOptions) (io.ReadCloser, error) {
+	opts := &corev1.PodLogOptions{Container: container, Follow: o.Follow}
+	if o.LimitBytes > 0 {
+		opts.LimitBytes = &o.LimitBytes
+	}
+
+	if o.TailLines > 0 {
+		opts.TailLines = &o.TailLines
+	}
+
+	rc, err := k.Client.CoreV1().Pods(namespace).GetLogs(pod, opts).Stream(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("open log of %s/%s: %w", pod, container, err)
 	}
@@ -215,7 +234,7 @@ func (s *Streamer) copyStep(
 	ctx context.Context, out *tracker, begin func(), namespace, taskRun, pod string, st step, follow bool,
 ) error {
 	for {
-		rc, err := s.Pods.Open(ctx, namespace, pod, st.container, follow)
+		rc, err := s.Pods.Open(ctx, namespace, pod, st.container, OpenOptions{Follow: follow})
 
 		switch {
 		case err == nil:
@@ -280,4 +299,104 @@ func copyFlushed(ctx context.Context, w io.Writer, r io.Reader) error {
 			return fmt.Errorf("read log: %w", err)
 		}
 	}
+}
+
+// tailLines bounds the second read of a log larger than the excerpt limit.
+const tailLines = 2000
+
+// Excerpt is the part of a step log Tail read.
+type Excerpt struct {
+	Text string
+	// FromStart is true when Text begins at the first line of the log.
+	FromStart bool
+}
+
+// Tail reads at most limit bytes of one step's log without following: the whole log when it is
+// that small, else its last lines (cut at a line boundary). ErrGone means the pod is gone.
+// A step whose container never started yields an empty excerpt.
+func (s *Streamer) Tail(ctx context.Context, namespace, taskRun, stepName string, limit int) (Excerpt, error) {
+	tr, ok := s.TaskRuns.TaskRun(namespace, taskRun)
+	if !ok {
+		return Excerpt{}, ErrGone
+	}
+
+	var container string
+
+	for _, st := range stepsOf(tr) {
+		if st.name == stepName {
+			container = st.container
+		}
+	}
+
+	pod := model.Str(tr.Object, "status", "podName")
+
+	switch {
+	case container == "":
+		return Excerpt{}, fmt.Errorf("%w: %q", ErrNoStep, stepName)
+	case pod == "":
+		return Excerpt{}, ErrGone
+	}
+
+	head, err := s.readAll(ctx, namespace, pod, container, OpenOptions{LimitBytes: int64(limit) + 1}, limit+1)
+	if err != nil {
+		return Excerpt{}, err
+	}
+
+	if len(head) <= limit {
+		return Excerpt{Text: string(head), FromStart: true}, nil
+	}
+
+	tail, err := s.readAll(ctx, namespace, pod, container, OpenOptions{TailLines: tailLines}, limit)
+	if err != nil {
+		return Excerpt{}, err
+	}
+
+	// The tail starts mid-line when it was cut by size; drop the partial first line.
+	if len(tail) == limit {
+		if i := bytes.IndexByte(tail, '\n'); i >= 0 {
+			tail = tail[i+1:]
+		}
+	}
+
+	return Excerpt{Text: string(tail)}, nil
+}
+
+// readAll returns the last keep bytes of a container log; a container that has not started reads as empty.
+func (s *Streamer) readAll(ctx context.Context, namespace, pod, container string, o OpenOptions, keep int) ([]byte, error) {
+	rc, err := s.Pods.Open(ctx, namespace, pod, container, o)
+
+	switch {
+	case apierrors.IsNotFound(err):
+		return nil, ErrGone
+	case apierrors.IsBadRequest(err):
+		return nil, nil
+	case err != nil:
+		return nil, err
+	}
+
+	defer func() { _ = rc.Close() }()
+
+	var (
+		data []byte
+		buf  = make([]byte, 32*1024)
+	)
+
+	for {
+		n, err := rc.Read(buf)
+		data = append(data, buf[:n]...)
+
+		if len(data) > 2*keep {
+			data = append(data[:0], data[len(data)-keep:]...)
+		}
+
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("read log: %w", err)
+		}
+	}
+
+	return data[max(len(data)-keep, 0):], nil
 }

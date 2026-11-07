@@ -10,8 +10,9 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 // from PipelineRun annotations, which a PR's .tekton template can influence: never trust the scheme.
 import { computed } from 'vue'
 import { safeHttpUrl } from '../lib/format'
+import Icon from './Icon.vue'
 
-const props = defineProps<{ href: string }>()
+const props = defineProps<{ href: string; icon?: boolean }>()
 const safeHref = computed(() => safeHttpUrl(props.href))
 </script>
 
@@ -21,9 +22,10 @@ const safeHref = computed(() => safeHttpUrl(props.href))
     :href="safeHref"
     target="_blank"
     rel="noopener noreferrer"
-    class="text-blue-700 hover:underline dark:text-blue-400"
+    :class="icon ? 'inline-flex items-center gap-1' : ''"
   >
     <slot />
+    <Icon v-if="icon" name="ext" sm />
   </a>
   <span v-else><slot /></span>
 </template>

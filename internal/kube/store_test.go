@@ -193,3 +193,44 @@ func TestPipelineSpecFallsBackToPipelineRef(t *testing.T) {
 		t.Fatal("expected ErrNoPipelineSpec")
 	}
 }
+
+// The informers replay every object as an Add during the initial list; none of that may reach
+// subscribers, only changes after the caches synced.
+func TestNotifySilentBeforeReady(t *testing.T) {
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		RepositoryGVR:  "RepositoryList",
+		PipelineRunGVR: "PipelineRunList",
+		TaskRunGVR:     "TaskRunList",
+		PipelineGVR:    "PipelineList",
+	})
+
+	s, err := NewStore(client, nil, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	events, cancel := s.Subscribe()
+	defer cancel()
+
+	run := plr("ci", "r1", "repo", "1", "2025-01-01T00:00:00Z", "True")
+
+	s.notify("PipelineRun", run)
+
+	select {
+	case e := <-events:
+		t.Fatalf("event before ready: %+v", e)
+	default:
+	}
+
+	s.ready.Store(true)
+	s.notify("PipelineRun", run)
+
+	select {
+	case e := <-events:
+		if e.Kind != "PipelineRun" || e.Name != "r1" || e.Repository != "repo" {
+			t.Fatalf("event = %+v", e)
+		}
+	default:
+		t.Fatal("no event after ready")
+	}
+}

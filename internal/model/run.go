@@ -78,7 +78,8 @@ func SafeURL(raw string) string {
 }
 
 var (
-	nameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	// nameRe rejects ".", ".." and a leading dot: those are path segments, not names.
+	nameRe = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]*$`)
 	hexRe  = regexp.MustCompile(`^[0-9a-fA-F]+$`)
 	numRe  = regexp.MustCompile(`^[0-9]+$`)
 )
@@ -189,7 +190,7 @@ func RepositoryOf(u *unstructured.Unstructured) RepositorySummary {
 	r := RepositorySummary{
 		Namespace: u.GetNamespace(),
 		Name:      u.GetName(),
-		URL:       Str(u.Object, "spec", "url"),
+		URL:       SafeURL(Str(u.Object, "spec", "url")),
 	}
 
 	v, found, _ := unstructured.NestedFieldNoCopy(u.Object, "spec", "concurrency_limit")

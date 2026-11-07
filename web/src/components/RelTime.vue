@@ -16,5 +16,5 @@ const text = computed(() => relativeTime(props.iso, now.value))
 
 <template>
   <time v-if="iso" :datetime="iso" :title="absoluteTime(iso)" class="whitespace-nowrap">{{ text }}</time>
-  <span v-else class="text-gray-400" aria-label="unknown">—</span>
+  <span v-else class="text-faint" aria-label="unknown">—</span>
 </template>

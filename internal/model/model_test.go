@@ -294,6 +294,10 @@ func TestParamsAndRepository(t *testing.T) {
 		t.Fatalf("repo = %+v", repo)
 	}
 
+	if u := RepositoryOf(obj(t, `{"spec":{"url":"javascript:alert(1)"}}`)).URL; u != "" {
+		t.Fatalf("unsafe repository url kept: %q", u)
+	}
+
 	if RepositoryOf(obj(t, `{"spec":{}}`)).ConcurrencyLimit != nil {
 		t.Fatal("concurrency limit must be null when unset")
 	}

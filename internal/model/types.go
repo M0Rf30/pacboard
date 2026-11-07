@@ -74,6 +74,29 @@ type RepositorySummary struct {
 	ConcurrencyLimit *int        `json:"concurrencyLimit"`
 	LastRun          *RunSummary `json:"lastRun"`
 	RunCount         int         `json:"runCount"`
+	// Recent holds up to RecentRuns runs, newest first.
+	Recent                 []RunBrief `json:"recent"`
+	TypicalDurationSeconds *int64     `json:"typicalDurationSeconds"`
+	Intermittent           bool       `json:"intermittent"`
+}
+
+// RunBrief is one entry of a repository's history strip.
+type RunBrief struct {
+	Name            string     `json:"name"`
+	Status          RunStatus  `json:"status"`
+	StartTime       *time.Time `json:"startTime"`
+	DurationSeconds *int64     `json:"durationSeconds"`
+}
+
+// Failure explains why a run failed (the banner above the graph).
+type Failure struct {
+	Task           string `json:"task"`
+	TaskRun        string `json:"taskRun"`
+	Step           string `json:"step"`
+	ExitCode       *int   `json:"exitCode"`
+	Message        string `json:"message"`
+	Line           *int   `json:"line"`
+	SkippedBecause int    `json:"skippedBecause"`
 }
 
 // Step is one step container of a TaskRun.
@@ -127,6 +150,9 @@ type RunDetail struct {
 	Edges    []GraphEdge `json:"edges"`
 	Params   []Param     `json:"params"`
 	CanRerun bool        `json:"canRerun"`
+
+	TypicalDurationSeconds *int64   `json:"typicalDurationSeconds"`
+	Failure                *Failure `json:"failure"`
 }
 
 // Me describes the current user.

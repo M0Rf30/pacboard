@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -32,8 +33,9 @@ const (
 )
 
 // safeName limits what is put into a GitHub URL path or a PR comment: org, repository and
-// pipeline names are DNS-ish, never whitespace or slashes.
-var safeName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+// pipeline names are DNS-ish, never whitespace or slashes, and never "." / ".." / a leading dot
+// (a path segment that a client or proxy may normalise away).
+var safeName = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]*$`)
 
 func (h *handler) me(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, h.Auth.Me(r))
@@ -118,12 +120,19 @@ func (h *handler) run(w http.ResponseWriter, r *http.Request) {
 	graph := dag.Build(spec, plr, taskRuns)
 	summary := model.RunSummaryOf(plr, h.Now())
 
+	var siblings []model.RunSummary
+	if summary.Repository != "" {
+		siblings = h.Store.Runs(kube.RunFilter{Namespace: summary.Namespace, Repository: summary.Repository})
+	}
+
 	httpx.JSON(w, http.StatusOK, model.RunDetail{
-		Summary:  summary,
-		Nodes:    graph.Nodes,
-		Edges:    graph.Edges,
-		Params:   model.Params(plr.Object),
-		CanRerun: h.Auth.Me(r).CanRerun && canRerun(summary),
+		Summary:                summary,
+		Nodes:                  graph.Nodes,
+		Edges:                  graph.Edges,
+		Params:                 model.Params(plr.Object),
+		CanRerun:               h.Auth.Me(r).CanRerun && canRerun(summary),
+		TypicalDurationSeconds: model.TypicalDuration(siblings),
+		Failure:                h.failure(r.Context(), plr, summary, graph.Nodes, taskRuns),
 	})
 }
 
@@ -219,15 +228,44 @@ func (l *lazyWriter) Write(p []byte) (int, error) {
 		l.w.WriteHeader(http.StatusOK)
 	}
 
+	defer setWriteDeadline(l.rc)()
+
 	n, err := l.w.Write(p)
 	if err != nil {
 		return n, fmt.Errorf("write response: %w", err)
 	}
 
-	// A flush error means the client went away; the next write reports it.
+	// A flush error means the client went away or stalled; the next write reports it.
 	_ = l.rc.Flush()
 
 	return n, nil
+}
+
+// writeTimeout bounds one write+flush to a streaming client. The server has no WriteTimeout (the
+// streams are long-lived), so a client that stops reading would otherwise pin its handler.
+var writeTimeout = 30 * time.Second
+
+// setWriteDeadline arms the per-write deadline and returns the function that clears it. Writers
+// that do not support deadlines (recorders in tests) are left alone.
+func setWriteDeadline(rc *http.ResponseController) func() {
+	_ = rc.SetWriteDeadline(time.Now().Add(writeTimeout))
+
+	return func() { _ = rc.SetWriteDeadline(time.Time{}) }
+}
+
+// sendEvent writes one SSE message and flushes it under the write deadline.
+func sendEvent(w http.ResponseWriter, rc *http.ResponseController, msg string) error {
+	defer setWriteDeadline(rc)()
+
+	if _, err := io.WriteString(w, msg); err != nil {
+		return fmt.Errorf("write event: %w", err)
+	}
+
+	if err := rc.Flush(); err != nil {
+		return fmt.Errorf("flush event: %w", err)
+	}
+
+	return nil
 }
 
 func (h *handler) events(w http.ResponseWriter, r *http.Request) {
@@ -238,7 +276,7 @@ func (h *handler) events(w http.ResponseWriter, r *http.Request) {
 	hdr.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 
-	if _, err := fmt.Fprint(w, ": connected\n\n"); err != nil || rc.Flush() != nil {
+	if sendEvent(w, rc, ": connected\n\n") != nil {
 		return
 	}
 
@@ -265,7 +303,7 @@ func (h *handler) events(w http.ResponseWriter, r *http.Request) {
 			msg = "event: change\ndata: " + string(data) + "\n\n"
 		}
 
-		if _, err := fmt.Fprint(w, msg); err != nil || rc.Flush() != nil {
+		if sendEvent(w, rc, msg) != nil {
 			return
 		}
 	}

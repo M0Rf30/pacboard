@@ -1,0 +1,9 @@
+pacboard {{ .Chart.AppVersion }} is installed (auth mode: {{ .Values.auth.mode }}).
+{{- if eq .Values.auth.mode "none" }}
+No login and no rerun buttons: expose it only behind a VPN or an authenticating proxy.
+{{- end }}
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "pacboard.fullname" . }} 8080:{{ .Values.service.port }}
+  open http://127.0.0.1:8080
+
+Pipelines-as-Code links: set custom-console-* in the pipelines-as-code ConfigMap, see the chart README.

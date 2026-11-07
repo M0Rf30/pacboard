@@ -6,18 +6,16 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 <script setup lang="ts">
 import type { NodeStatus } from '@/api/types'
-import { statusClasses, statusGlyph } from '@/lib/status'
+import { statusStyle } from '@/lib/status'
+import StatusIcon from './StatusIcon.vue'
 
-defineProps<{ status: NodeStatus; reason?: string }>()
+// Colour + shape + word: a status is never shown as a bare dot.
+defineProps<{ status: NodeStatus; size?: 'md' | 'lg'; reason?: string }>()
 </script>
 
 <template>
-  <span
-    class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium"
-    :class="statusClasses(status)"
-    :title="reason || undefined"
-  >
-    <span aria-hidden="true" :class="{ 'animate-pulse': status === 'Running' }">{{ statusGlyph(status) }}</span>
-    {{ status }}
+  <span class="badge" :class="[statusStyle(status).cls, { lg: size === 'lg' }]" :title="reason || undefined">
+    <StatusIcon :status="status" />
+    <span>{{ statusStyle(status).label }}</span>
   </span>
 </template>

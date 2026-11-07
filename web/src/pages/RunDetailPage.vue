@@ -5,21 +5,25 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useEventListener } from '@vueuse/core'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
-import Duration from '@/components/Duration.vue'
-import ExtLink from '@/components/ExtLink.vue'
+import Breadcrumb from '@/components/Breadcrumb.vue'
+import FailureCallout from '@/components/FailureCallout.vue'
 import LiveIndicator from '@/components/LiveIndicator.vue'
-import RelTime from '@/components/RelTime.vue'
-import RerunPanel from '@/components/RerunPanel.vue'
+import type { FocusRequest } from '@/components/LogViewer.vue'
+import PipelineGraph from '@/components/PipelineGraph.vue'
+import RerunButtons from '@/components/RerunButtons.vue'
+import RunHeader from '@/components/RunHeader.vue'
 import StateMessage from '@/components/StateMessage.vue'
-import StatusBadge from '@/components/StatusBadge.vue'
-import TaskGraph from '@/components/TaskGraph.vue'
 import TaskPanel from '@/components/TaskPanel.vue'
 import { useLive } from '@/composables/useLive'
 import { useMe } from '@/composables/useMe'
+import { usePageTitle } from '@/composables/usePageTitle'
 import { useResource } from '@/composables/useResource'
+import { isTyping } from '@/lib/keys'
+import { failureTargets, landingSelection, neighbourStep, pickTask, type Selection } from '@/lib/runview'
 
 const props = defineProps<{ namespace: string; name: string }>()
 
@@ -31,20 +35,20 @@ const { data, error, errorStatus, loading, refresh } = useResource(
   (signal) => api.run(props.namespace, props.name, signal),
   [() => props.namespace, () => props.name],
 )
-const live = useLive(
+const { connected, paused } = useLive(
   () => void refresh(),
   (e) => e.namespace === props.namespace && (e.run === props.name || (e.kind === 'PipelineRun' && e.name === props.name)),
 )
 
-type Selection = 'task' | 'taskRun' | 'step'
+type Key = keyof Selection | 'line'
 
-function query(key: Selection): string {
+function query(key: Key): string {
   const v = route.query[key]
   return typeof v === 'string' ? v : ''
 }
 
 // One replace for several keys: separate writes would each start from the same stale route.query.
-function setSelection(patch: Partial<Record<Selection, string>>): void {
+function setQuery(patch: Partial<Record<Key, string>>): void {
   const q = { ...route.query }
   for (const [k, v] of Object.entries(patch)) {
     if (v) q[k] = v
@@ -53,142 +57,139 @@ function setSelection(patch: Partial<Record<Selection, string>>): void {
   void router.replace({ query: q })
 }
 
+function select(sel: Selection): void {
+  setQuery({ task: sel.task, step: sel.step, taskRun: sel.taskRun, line: '' })
+}
+
 const summary = computed(() => data.value?.summary)
-const git = computed(() => summary.value?.git)
-const selectedNode = computed(() => data.value?.nodes.find((n) => n.id === query('task')))
-
-// Open the task most worth looking at when the link names none: the first failure, else a running task.
-let picked = false
-watch(data, (d) => {
-  if (!d || picked) return
-  picked = true
-  if (query('task')) return
-  const node = d.nodes.find((n) => n.status === 'Failed') ?? d.nodes.find((n) => n.status === 'Running')
-  if (node) setSelection({ task: node.id })
-}, { immediate: true })
-
-watch(summary, (s) => {
-  if (s) document.title = `${s.prName || s.name} · pacboard`
-}, { immediate: true })
-
-const canRerun = computed(() => !!data.value?.canRerun && git.value?.prNumber !== null && !!git.value?.prUrl)
-
-const branchUrl = computed(() => {
-  const g = git.value
-  if (!g?.repoUrl || !g.branch) return ''
-  return `${g.repoUrl}/tree/${g.branch.split('/').map(encodeURIComponent).join('/')}`
+const failure = computed(() => data.value?.failure ?? null)
+const nodes = computed(() => data.value?.nodes ?? [])
+const selected = computed(() => nodes.value.find((n) => n.id === query('task')))
+const selection = computed<Selection>(() => ({ task: query('task'), step: query('step'), taskRun: query('taskRun') }))
+const highlight = computed<number | null>({
+  get: () => {
+    const n = Number.parseInt(query('line'), 10)
+    return Number.isFinite(n) && n > 0 ? n : null
+  },
+  set: (n) => setQuery({ line: n === null ? '' : String(n) }),
 })
-const senderUrl = computed(() => {
-  const g = git.value
-  if (!g?.sender || g.provider !== 'github') return ''
-  return `https://github.com/${encodeURIComponent(g.sender.replace(/\[bot\]$/, ''))}`
-})
-const repoLabel = computed(() => git.value?.repoUrl.replace(/^https?:\/\/[^/]+\//, '') ?? '')
 
-const dt = 'text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'
+// Where "Go to error line" and a failed landing send the log viewer.
+const focus = ref<FocusRequest | null>(null)
+let seq = 0
+function requestError(): void {
+  focus.value = { seq: ++seq, line: failure.value?.line ?? null, error: true }
+}
+
+// Open the task most worth looking at when the link names none: the failure, else the last task that ran.
+let landed = false
+watch(
+  data,
+  (d) => {
+    if (!d || landed) return
+    landed = true
+    if (selected.value) return
+    const sel = landingSelection(d.nodes, d.summary.status, d.failure)
+    if (!sel.task) return
+    select(sel)
+    if (failureTargets(d.failure, sel)) requestError()
+  },
+  { immediate: true },
+)
+
+usePageTitle(() => (summary.value ? summary.value.git.shaTitle || summary.value.prName || summary.value.name : ''))
+
+function pick(id: string): void {
+  const node = nodes.value.find((n) => n.id === id)
+  if (!node) return
+  const sel = pickTask(node)
+  select(sel)
+  if (failureTargets(failure.value, sel)) requestError()
+}
+
+function goToError(): void {
+  const d = data.value
+  const f = d?.failure
+  if (!d || !f || !f.task) return
+  select(landingSelection(d.nodes, 'Failed', f))
+  requestError()
+}
+
+const graphOpen = ref(true)
+
+useEventListener(document, 'keydown', (ev: KeyboardEvent) => {
+  if (isTyping(ev.target) || ev.metaKey || ev.ctrlKey || ev.altKey) return
+  switch (ev.key) {
+    case 'j':
+    case 'k': {
+      const node = selected.value
+      if (!node) return
+      const next = neighbourStep(node, query('step'), ev.key === 'j' ? 1 : -1)
+      if (next !== null) setQuery({ step: next, line: '' })
+      break
+    }
+    case 'e':
+      goToError()
+      break
+    case 'g':
+      graphOpen.value = !graphOpen.value
+      break
+    default:
+      return
+  }
+  ev.preventDefault()
+})
+
+const showRerun = computed(() => {
+  const d = data.value
+  return !!me.value?.canRerun && !!d?.canRerun && d.summary.git.prNumber !== null && !!d.summary.git.prUrl
+})
 </script>
 
 <template>
   <section>
-    <nav v-if="summary" aria-label="Breadcrumb" class="mb-1 text-sm text-gray-500 dark:text-gray-400">
-      <RouterLink to="/" class="hover:underline">Repositories</RouterLink> /
-      <RouterLink :to="{ name: 'repo-runs', params: { namespace: summary.namespace, name: summary.repository } }" class="hover:underline">{{ summary.repository }}</RouterLink> /
-    </nav>
+    <Breadcrumb
+      v-if="summary"
+      :items="[
+        { label: 'Repositories', to: '/' },
+        { label: summary.repository, to: { name: 'repo-runs', params: { namespace: summary.namespace, name: summary.repository } } },
+        { label: summary.name, mono: true },
+      ]"
+    />
 
     <StateMessage
       :error="error ? (errorStatus === 404 ? 'This run was not found. It may have been pruned from the cluster.' : error) : ''"
       :loading="loading"
       :empty="!data && !error"
+      @retry="refresh"
     />
 
-    <template v-if="data && summary && git">
-      <header class="mb-4 rounded border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-        <div class="flex flex-wrap items-center gap-3">
-          <h1 class="text-xl font-semibold">{{ summary.prName || summary.name }}</h1>
-          <StatusBadge :status="summary.status" :reason="summary.reason" />
-          <span class="text-sm text-gray-600 dark:text-gray-400">
-            <Duration :start="summary.startTime" :end="summary.completionTime" :status="summary.status" :seconds="summary.durationSeconds" />
-            · started <RelTime :iso="summary.startTime" />
-          </span>
-          <LiveIndicator class="ml-auto" :live="live" />
-        </div>
-        <p class="mt-1 break-all font-mono text-xs text-gray-500 dark:text-gray-400">{{ summary.namespace }}/{{ summary.name }}</p>
-        <p v-if="summary.message" class="mt-2 text-sm text-gray-700 dark:text-gray-300">{{ summary.reason }}: {{ summary.message }}</p>
+    <template v-if="data && summary">
+      <RunHeader :summary="summary" :params="data.params" :typical="data.typicalDurationSeconds">
+        <template #actions>
+          <RerunButtons v-if="showRerun" :summary="summary" :login="me?.login ?? ''" />
+          <span v-else-if="me && !me.canRerun" class="text-faint text-sm">Read-only deployment</span>
+          <LiveIndicator v-model:paused="paused" :connected="connected" />
+        </template>
+      </RunHeader>
 
-        <dl class="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-          <div v-if="git.repoUrl">
-            <dt :class="dt">Repository</dt>
-            <dd class="text-sm"><ExtLink :href="git.repoUrl">{{ repoLabel }}</ExtLink></dd>
-          </div>
-          <div v-if="git.prNumber !== null">
-            <dt :class="dt">Pull request</dt>
-            <dd class="text-sm">
-              <ExtLink :href="git.prUrl">#{{ git.prNumber }}</ExtLink>
-              <span v-if="git.sourceBranch" class="ml-1.5 font-mono text-xs text-gray-600 dark:text-gray-400">{{ git.sourceBranch }} → {{ git.branch }}</span>
-            </dd>
-          </div>
-          <div v-if="git.sha">
-            <dt :class="dt">Commit</dt>
-            <dd class="text-sm">
-              <ExtLink :href="git.shaUrl" class="font-mono">{{ git.shortSha }}</ExtLink>
-              <span v-if="git.shaTitle" class="ml-1.5">{{ git.shaTitle }}</span>
-            </dd>
-          </div>
-          <div v-if="git.branch">
-            <dt :class="dt">Branch</dt>
-            <dd class="text-sm"><ExtLink :href="branchUrl" class="font-mono">{{ git.branch }}</ExtLink></dd>
-          </div>
-          <div v-if="git.checkRunUrl">
-            <dt :class="dt">Check run</dt>
-            <dd class="text-sm"><ExtLink :href="git.checkRunUrl">View check run</ExtLink></dd>
-          </div>
-          <div v-if="git.sender">
-            <dt :class="dt">Triggered by</dt>
-            <dd class="text-sm">
-              <ExtLink :href="senderUrl">{{ git.sender }}</ExtLink>
-              <span v-if="git.eventType" class="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ git.eventType }}</span>
-            </dd>
-          </div>
-        </dl>
+      <FailureCallout :summary="summary" :failure="failure" :nodes="data.nodes" @go-to-error="goToError" />
 
-        <div v-if="canRerun" class="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800">
-          <RerunPanel :summary="summary" :login="me?.login ?? ''" />
-        </div>
-
-        <details v-if="data.params.length" class="mt-4">
-          <summary class="cursor-pointer text-sm font-medium">Parameters ({{ data.params.length }})</summary>
-          <table class="mt-2 w-full border-collapse text-sm">
-            <caption class="sr-only">PipelineRun parameters</caption>
-            <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-              <tr v-for="p in data.params" :key="p.name">
-                <th scope="row" class="w-1/4 whitespace-nowrap px-2 py-1 text-left align-top font-mono text-xs font-medium">{{ p.name }}</th>
-                <td class="break-all px-2 py-1 font-mono text-xs text-gray-700 dark:text-gray-300">{{ p.value }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </details>
-      </header>
-
-      <h2 class="mb-2 text-base font-semibold">Pipeline</h2>
-      <TaskGraph
-        :nodes="data.nodes"
-        :edges="data.edges"
-        :selected="selectedNode?.id ?? ''"
-        @select="(id) => setSelection({ task: id, taskRun: '', step: '' })"
-      />
+      <PipelineGraph v-model:open="graphOpen" :nodes="data.nodes" :edges="data.edges" :selected="selection.task" @select="pick" />
 
       <TaskPanel
-        v-if="selectedNode"
-        :key="selectedNode.id"
+        v-if="selected"
+        v-model:highlight="highlight"
         :namespace="summary.namespace"
         :run="summary.name"
-        :node="selectedNode"
-        :task-run="query('taskRun')"
-        :step="query('step')"
-        @update:task-run="(n) => setSelection({ taskRun: n, step: '' })"
-        @update:step="(n) => setSelection({ step: n })"
+        :node="selected"
+        :step="selection.step"
+        :task-run="selection.taskRun"
+        :focus="focus"
+        @update:step="(s) => setQuery({ step: s, line: '' })"
+        @update:task-run="(t) => setQuery({ taskRun: t, line: '' })"
       />
-      <p v-else-if="data.nodes.length" class="mt-4 text-sm text-gray-600 dark:text-gray-400">Select a task in the graph to see its steps and logs.</p>
+      <p v-else-if="data.nodes.length" class="text-muted mt-4 text-sm">Select a task in the graph to see its steps and logs.</p>
     </template>
   </section>
 </template>

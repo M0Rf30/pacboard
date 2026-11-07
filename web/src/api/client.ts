@@ -87,6 +87,15 @@ function qs(params: Record<string, string | number | null | undefined>): string 
   return s ? `?${s}` : ''
 }
 
+// A backend that predates the history/failure fields still renders: missing means empty or null.
+function withRepoDefaults(r: RepositorySummary): RepositorySummary {
+  return { ...r, recent: r.recent ?? [], typicalDurationSeconds: r.typicalDurationSeconds ?? null, concurrencyLimit: r.concurrencyLimit ?? null, intermittent: r.intermittent ?? false }
+}
+
+function withRunDefaults(d: RunDetail): RunDetail {
+  return { ...d, typicalDurationSeconds: d.typicalDurationSeconds ?? null, failure: d.failure ?? null }
+}
+
 export interface RepoRunsQuery {
   limit?: number
   pr?: number | null
@@ -97,7 +106,8 @@ export interface RepoRunsQuery {
 export const api = {
   me: (signal?: AbortSignal) => request<Me>('/api/v1/me', { signal }),
 
-  repositories: (signal?: AbortSignal) => request<RepositorySummary[]>('/api/v1/repositories', { signal }),
+  repositories: async (signal?: AbortSignal) =>
+    (await request<RepositorySummary[]>('/api/v1/repositories', { signal })).map(withRepoDefaults),
 
   repoRuns: (namespace: string, name: string, q: RepoRunsQuery = {}, signal?: AbortSignal) =>
     request<RunSummary[]>(
@@ -108,8 +118,8 @@ export const api = {
   runs: (q: { limit?: number; status?: RunStatus | '' } = {}, signal?: AbortSignal) =>
     request<RunSummary[]>(`/api/v1/runs${qs({ limit: q.limit ?? 100, status: q.status })}`, { signal }),
 
-  run: (namespace: string, name: string, signal?: AbortSignal) =>
-    request<RunDetail>(`/api/v1/runs/${seg(namespace)}/${seg(name)}`, { signal }),
+  run: async (namespace: string, name: string, signal?: AbortSignal) =>
+    withRunDefaults(await request<RunDetail>(`/api/v1/runs/${seg(namespace)}/${seg(name)}`, { signal })),
 
   rerun: (namespace: string, name: string, mode: RerunMode) =>
     request<RerunResult>(`/api/v1/runs/${seg(namespace)}/${seg(name)}/rerun`, {

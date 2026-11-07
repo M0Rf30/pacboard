@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: The pacboard Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+apiVersion: v2
+name: pacboard
+description: Dashboard for Tekton Pipelines-as-Code runs. Repositories, PR-linked runs, task graph, live logs and /test reruns; read-only on the cluster.
+type: application
+# version and appVersion are set from the git tag by the release workflow.
+version: 0.1.0
+appVersion: "v0.1.0"
+kubeVersion: ">=1.28.0-0"
+home: https://github.com/M0Rf30/pacboard
+sources:
+  - https://github.com/M0Rf30/pacboard
+icon: https://raw.githubusercontent.com/M0Rf30/pacboard/main/web/public/favicon.svg
+keywords: [tekton, pipelines-as-code, ci, dashboard, github]
+maintainers:
+  - name: M0Rf30
+    url: https://github.com/M0Rf30
+annotations:
+  artifacthub.io/license: AGPL-3.0-or-later
+  artifacthub.io/category: integration-delivery
+  artifacthub.io/operator: "false"
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/images: |
+    - name: pacboard
+      image: ghcr.io/m0rf30/pacboard:v0.1.0
+      platforms: [linux/amd64, linux/arm64]
+  artifacthub.io/links: |
+    - name: Source
+      url: https://github.com/M0Rf30/pacboard
+    - name: API contract
+      url: https://github.com/M0Rf30/pacboard/blob/main/docs/api.md
+  artifacthub.io/changes: |
+    - kind: added
+      description: First chart release

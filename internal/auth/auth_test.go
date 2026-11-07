@@ -30,6 +30,7 @@ type fakeGitHub struct {
 	members     map[string]bool // login -> active member of "acme"
 	revoked     bool            // memberships answer 401
 	membership  int             // membership calls seen
+	gate        chan struct{}   // when set, membership answers wait until it is closed
 	lastVerifer string
 }
 
@@ -61,8 +62,12 @@ func newFakeGitHub(t *testing.T, members map[string]bool) *fakeGitHub {
 	mux.HandleFunc("GET /api/v3/user/memberships/orgs/{org}", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.membership++
-		revoked := f.revoked
+		revoked, gate := f.revoked, f.gate
 		f.mu.Unlock()
+
+		if gate != nil {
+			<-gate
+		}
 
 		login := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer tok-")
 
@@ -428,7 +433,16 @@ func TestMembershipIsCachedAndRevocationEndsSession(t *testing.T) {
 		t.Fatalf("revoked token = %d", rec.Code)
 	}
 
+	// The failure is remembered for a few seconds, not asked again per request.
+	calls := f.membership
+
+	if rec := do(h, http.MethodGet, "/api/v1/runs", cookies, nil); rec.Code != http.StatusUnauthorized || f.membership != calls {
+		t.Fatalf("repeat within error window = %d, GitHub calls %d -> %d", rec.Code, calls, f.membership)
+	}
+
 	// And a removed member is refused after the window.
+	now = now.Add(membershipErrorTTL + time.Second)
+
 	f.mu.Lock()
 	f.revoked = false
 	f.members["alice"] = false
@@ -436,6 +450,60 @@ func TestMembershipIsCachedAndRevocationEndsSession(t *testing.T) {
 
 	if rec := do(h, http.MethodGet, "/api/v1/runs", cookies, nil); rec.Code != http.StatusForbidden {
 		t.Fatalf("removed member = %d", rec.Code)
+	}
+}
+
+func TestExpiredMembershipIsCheckedOncePerSession(t *testing.T) {
+	f := newFakeGitHub(t, map[string]bool{"alice": true})
+	s := newService(t, f)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	h := app(s)
+
+	_, cookies := loginAs(t, h, f, "alice", "/")
+	afterLogin := f.membership
+	now = now.Add(membershipTTL + time.Second)
+
+	f.mu.Lock()
+	f.gate = make(chan struct{})
+	gate := f.gate
+	f.mu.Unlock()
+
+	const requests = 8
+
+	codes := make(chan int, requests)
+
+	for range requests {
+		go func() { codes <- do(h, http.MethodGet, "/api/v1/runs", cookies, nil).Code }()
+	}
+
+	// One request is at GitHub; give the others time to pile up behind it.
+	deadline := time.Now().Add(5 * time.Second)
+
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		n := f.membership
+		f.mu.Unlock()
+
+		if n > afterLogin {
+			break
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	close(gate)
+
+	for range requests {
+		if code := <-codes; code != http.StatusOK {
+			t.Fatalf("status = %d", code)
+		}
+	}
+
+	// A single re-check walks the allowed orgs once ("other" says no, "acme" yes).
+	if got := f.membership - afterLogin; got != 2 {
+		t.Fatalf("GitHub membership calls for %d concurrent requests = %d, want 2", requests, got)
 	}
 }
 
@@ -488,6 +556,10 @@ func TestLogoutClearsSession(t *testing.T) {
 
 	if c := cookie(rec, CookieSession); c == nil || c.MaxAge >= 0 || c.Value != "" {
 		t.Fatalf("session cookie after logout = %+v", c)
+	}
+
+	if c := cookie(rec, CookieCSRF); c == nil || c.MaxAge >= 0 || c.Value != "" {
+		t.Fatalf("csrf cookie after logout = %+v", c)
 	}
 }
 

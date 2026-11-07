@@ -21,5 +21,5 @@ const text = computed(() => formatDuration(liveDuration(props.start, props.end, 
 </script>
 
 <template>
-  <span class="whitespace-nowrap tabular-nums">{{ text }}</span>
+  <span class="font-mono whitespace-nowrap tabular-nums">{{ text }}</span>
 </template>

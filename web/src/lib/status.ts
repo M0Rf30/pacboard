@@ -6,40 +6,28 @@ import type { NodeStatus, RunStatus } from '@/api/types'
 
 export const RUN_STATUSES: RunStatus[] = ['Succeeded', 'Failed', 'Running', 'Pending', 'Cancelled', 'Unknown']
 
-/** Tailwind classes of the status pill (background, text, border), light + dark. */
-export function statusClasses(status: NodeStatus): string {
-  switch (status) {
-    case 'Succeeded':
-      return 'bg-green-100 text-green-800 border-green-600/30 dark:bg-green-950 dark:text-green-300 dark:border-green-500/40'
-    case 'Failed':
-      return 'bg-red-100 text-red-800 border-red-600/30 dark:bg-red-950 dark:text-red-300 dark:border-red-500/40'
-    case 'Running':
-      return 'bg-blue-100 text-blue-800 border-blue-600/30 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-500/40'
-    case 'Cancelled':
-      return 'bg-orange-100 text-orange-800 border-orange-600/30 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-500/40'
-    case 'Skipped':
-      return 'bg-transparent text-gray-500 border-dashed border-gray-400 dark:text-gray-400 dark:border-gray-500'
-    default:
-      return 'bg-gray-100 text-gray-700 border-gray-500/30 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-500/40'
-  }
+/**
+ * The one place a status gets its look: the `s-*` class sets `--c` (colour token), the icon is a
+ * distinct shape, the label is the word printed next to it. Badge, strip, node and step all read this,
+ * so a status can never be styled inconsistently (spec §3.2, §7).
+ */
+export interface StatusStyle {
+  cls: string
+  icon: string
+  label: string
 }
 
-/** Glyph for the status so it is never conveyed by colour alone. */
-export function statusGlyph(status: NodeStatus): string {
-  switch (status) {
-    case 'Succeeded':
-      return '✓'
-    case 'Failed':
-      return '✕'
-    case 'Running':
-      return '●'
-    case 'Cancelled':
-      return '⊘'
-    case 'Skipped':
-      return '↷'
-    case 'Pending':
-      return '○'
-    default:
-      return '?'
-  }
+const STYLES: Record<NodeStatus, StatusStyle> = {
+  Succeeded: { cls: 's-succeeded', icon: 'succeeded', label: 'Succeeded' },
+  Failed: { cls: 's-failed', icon: 'failed', label: 'Failed' },
+  Running: { cls: 's-running', icon: 'running', label: 'Running' },
+  Pending: { cls: 's-pending', icon: 'pending', label: 'Pending' },
+  Cancelled: { cls: 's-cancelled', icon: 'cancelled', label: 'Cancelled' },
+  Unknown: { cls: 's-unknown', icon: 'unknown', label: 'Unknown' },
+  Skipped: { cls: 's-skipped', icon: 'skipped', label: 'Skipped' },
+}
+
+/** Style of a status; anything unexpected from the API renders as Unknown. */
+export function statusStyle(status: NodeStatus): StatusStyle {
+  return STYLES[status] ?? STYLES.Unknown
 }

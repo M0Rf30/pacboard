@@ -30,58 +30,117 @@ export interface LayoutEdge {
   path: string
 }
 
-export interface LayoutGroup {
-  label: string
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
 export interface GraphLayout {
   nodes: LayoutNode[]
   edges: LayoutEdge[]
-  /** Frame drawn around the `finally` tasks. */
-  groups: LayoutGroup[]
   width: number
   height: number
 }
 
-export const NODE_HEIGHT = 52
-export const MAX_LABEL = 30
-const MIN_WIDTH = 150
-const MAX_WIDTH = 280
+/** Executed tasks: status colour, duration, steps. */
+export const NODE_WIDTH = 172
+export const NODE_HEIGHT = 46
+/** Skipped tasks are smaller and muted: they carry less weight than executed work. */
+export const SKIPPED_WIDTH = 132
+export const SKIPPED_HEIGHT = 34
+const MAX_WIDTH = 300
 const CHAR_WIDTH = 7.4
-const GROUP_PAD = 14
-const GROUP_HEADER = 18
-const MARGIN_X = 24
-const MARGIN_Y = 36
+// Icon column plus padding on both sides of the label.
+const LABEL_CHROME = 44
+const MARGIN_X = 8
+const MARGIN_Y = 14
+
+/** Zoom limits of the graph viewer. */
+export const MIN_SCALE = 0.2
+export const MAX_SCALE = 3
 
 // When two edges join the same pair, the strongest kind wins the drawing.
 const KIND_PRIORITY: Record<EdgeKind, number> = { runAfter: 0, finally: 1, result: 2 }
 
-export function nodeLabel(id: string): string {
-  return id.length > MAX_LABEL ? `${id.slice(0, MAX_LABEL - 1)}…` : id
+function isSkipped(n: GraphNode): boolean {
+  return n.status === 'Skipped'
 }
 
-export function nodeWidth(id: string): number {
-  const w = Math.ceil(nodeLabel(id).length * CHAR_WIDTH + 64)
-  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, w))
+/** Box of a task: the spec's fixed size, widened only when the name would not fit (long task names). */
+export function nodeSize(n: GraphNode): { width: number; height: number } {
+  const skipped = isSkipped(n)
+  const base = skipped ? SKIPPED_WIDTH : NODE_WIDTH
+  const wanted = Math.ceil(n.id.length * CHAR_WIDTH + LABEL_CHROME)
+  return { width: Math.min(MAX_WIDTH, Math.max(base, wanted)), height: skipped ? SKIPPED_HEIGHT : NODE_HEIGHT }
+}
+
+/** The name drawn in the box: ellipsised only when even the widest box cannot hold it. */
+export function nodeLabel(id: string): string {
+  const max = Math.floor((MAX_WIDTH - LABEL_CHROME) / CHAR_WIDTH)
+  return id.length > max ? `${id.slice(0, max - 1)}…` : id
 }
 
 /**
- * Maps the API graph onto a dagre graph: one node per task (sized from its label), one edge per
+ * Hide skipped tasks by default when more than a third of the tasks are skipped (typical of PR runs
+ * of big pipelines). Never when nothing was executed: an all-skipped graph would be empty.
+ */
+export function hideSkippedDefault(nodes: readonly GraphNode[]): boolean {
+  if (nodes.length === 0) return false
+  const skipped = nodes.filter(isSkipped).length
+  return skipped < nodes.length && skipped * 3 > nodes.length
+}
+
+/**
+ * The graph without its skipped tasks. An edge that ran through a skipped task is bridged to the
+ * nearest executed ancestor (keeping the kind of the edge that entered the survivor), so that e.g. a
+ * `finally` task whose parents were all skipped stays attached to the graph instead of floating alone.
+ */
+export function withoutSkipped(
+  nodes: readonly GraphNode[],
+  edges: readonly GraphEdge[],
+): { nodes: GraphNode[]; edges: GraphEdge[] } {
+  const hidden = new Set(nodes.filter(isSkipped).map((n) => n.id))
+  if (hidden.size === 0) return { nodes: nodes.slice(), edges: edges.slice() }
+
+  const parents = new Map<string, string[]>()
+  for (const e of edges) {
+    const list = parents.get(e.to)
+    if (list) list.push(e.from)
+    else parents.set(e.to, [e.from])
+  }
+
+  // Executed ancestors reachable from a task through skipped tasks only.
+  const executedAncestors = (id: string, seen: Set<string>): string[] => {
+    if (!hidden.has(id)) return [id]
+    if (seen.has(id)) return []
+    seen.add(id)
+    return (parents.get(id) ?? []).flatMap((p) => executedAncestors(p, seen))
+  }
+
+  const kept = nodes.filter((n) => !hidden.has(n.id))
+  const out: GraphEdge[] = []
+  const seenEdges = new Set<string>()
+  const add = (from: string, to: string, kind: EdgeKind) => {
+    const key = `${from}\u0000${to}\u0000${kind}`
+    if (from === to || seenEdges.has(key)) return
+    seenEdges.add(key)
+    out.push({ from, to, kind })
+  }
+  for (const e of edges) {
+    if (hidden.has(e.to)) continue
+    for (const from of executedAncestors(e.from, new Set())) add(from, e.to, e.kind)
+  }
+  return { nodes: kept, edges: out }
+}
+
+/**
+ * Maps the API graph onto a dagre graph: one node per task (sized by `nodeSize`), one edge per
  * connected pair (unknown endpoints and self loops dropped, duplicates merged by kind priority).
  */
 export function buildDagreGraph(nodes: readonly GraphNode[], edges: readonly GraphEdge[]): Graph {
   const g = new dagre.graphlib.Graph()
-  g.setGraph({ rankdir: 'LR', nodesep: 22, ranksep: 64, marginx: MARGIN_X, marginy: MARGIN_Y, edgesep: 12 })
+  g.setGraph({ rankdir: 'LR', nodesep: 14, ranksep: 60, marginx: MARGIN_X, marginy: MARGIN_Y, edgesep: 10 })
   g.setDefaultEdgeLabel(() => ({}))
 
   const ids = new Set<string>()
   for (const n of nodes) {
     ids.add(n.id)
-    g.setNode(n.id, { width: nodeWidth(n.id), height: NODE_HEIGHT })
+    g.setNode(n.id, nodeSize(n))
   }
 
   const kinds = new Map<string, EdgeKind>()
@@ -124,7 +183,7 @@ export function pathFromPoints(pts: readonly Point[]): string {
 
 /** Lays the graph out left to right and returns everything the SVG needs. */
 export function layoutGraph(nodes: readonly GraphNode[], edges: readonly GraphEdge[]): GraphLayout {
-  if (nodes.length === 0) return { nodes: [], edges: [], groups: [], width: 0, height: 0 }
+  if (nodes.length === 0) return { nodes: [], edges: [], width: 0, height: 0 }
 
   const g = buildDagreGraph(nodes, edges)
   dagre.layout(g)
@@ -152,22 +211,73 @@ export function layoutGraph(nodes: readonly GraphNode[], edges: readonly GraphEd
     return { from: e.v, to: e.w, kind: label.kind, points, path: pathFromPoints(points) }
   })
 
-  const groups: LayoutGroup[] = []
-  const fin = laidOut.filter((n) => n.node.finally)
-  if (fin.length > 0) {
-    const x0 = Math.min(...fin.map((n) => n.x)) - GROUP_PAD
-    const y0 = Math.min(...fin.map((n) => n.y)) - GROUP_PAD - GROUP_HEADER
-    const x1 = Math.max(...fin.map((n) => n.x + n.width)) + GROUP_PAD
-    const y1 = Math.max(...fin.map((n) => n.y + n.height)) + GROUP_PAD
-    groups.push({ label: 'finally', x: x0, y: y0, width: x1 - x0, height: y1 - y0 })
-  }
-
   const gl = g.graph()
-  let width = gl.width ?? 0
-  let height = gl.height ?? 0
-  for (const grp of groups) {
-    width = Math.max(width, grp.x + grp.width + MARGIN_X)
-    height = Math.max(height, grp.y + grp.height + MARGIN_Y)
+  return { nodes: laidOut, edges: laidEdges, width: gl.width ?? 0, height: gl.height ?? 0 }
+}
+
+/**
+ * Zoom-to-fit by width: the largest scale (never above 1:1) at which the whole graph is as wide as the
+ * container, so a long pipeline is never clipped on load. `width`/`height` are the scaled pixel size
+ * of the drawing. Without a measurable container the graph stays at 1:1.
+ */
+export function fitToWidth(
+  contentWidth: number,
+  contentHeight: number,
+  viewWidth: number,
+): { scale: number; width: number; height: number } {
+  const raw = contentWidth > 0 && viewWidth > 0 ? Math.min(1, viewWidth / contentWidth) : 1
+  const scale = Math.max(MIN_SCALE, raw)
+  return { scale, width: contentWidth * scale, height: contentHeight * scale }
+}
+
+/** `scale` multiplied by `factor`, kept inside the zoom limits. */
+export function clampScale(scale: number, factor: number): number {
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * factor))
+}
+
+export type Direction = 'left' | 'right' | 'up' | 'down'
+
+/**
+ * The task nearest to `fromId` in an arrow-key direction: strictly beyond it along the axis, ranked by
+ * distance along the axis plus a penalty for drifting off it. null when nothing lies that way.
+ */
+export function nearestNode(nodes: readonly LayoutNode[], fromId: string, dir: Direction): string | null {
+  const from = nodes.find((n) => n.id === fromId)
+  if (!from) return null
+  const cx = from.x + from.width / 2
+  const cy = from.y + from.height / 2
+  let best: string | null = null
+  let bestScore = Infinity
+  for (const n of nodes) {
+    if (n.id === fromId) continue
+    const dx = n.x + n.width / 2 - cx
+    const dy = n.y + n.height / 2 - cy
+    let along: number
+    let across: number
+    switch (dir) {
+      case 'right':
+        along = dx
+        across = dy
+        break
+      case 'left':
+        along = -dx
+        across = dy
+        break
+      case 'down':
+        along = dy
+        across = dx
+        break
+      case 'up':
+        along = -dy
+        across = dx
+        break
+    }
+    if (along <= 0) continue
+    const score = along + Math.abs(across) * 1.6
+    if (score < bestScore) {
+      bestScore = score
+      best = n.id
+    }
   }
-  return { nodes: laidOut, edges: laidEdges, groups, width, height }
+  return best
 }

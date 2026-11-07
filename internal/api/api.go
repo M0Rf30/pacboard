@@ -18,6 +18,7 @@ import (
 	"github.com/M0Rf30/pacboard/internal/github"
 	"github.com/M0Rf30/pacboard/internal/httpx"
 	"github.com/M0Rf30/pacboard/internal/kube"
+	"github.com/M0Rf30/pacboard/internal/logs"
 	"github.com/M0Rf30/pacboard/internal/model"
 )
 
@@ -35,6 +36,8 @@ type Store interface {
 // LogStreamer writes step logs; logs.Streamer implements it.
 type LogStreamer interface {
 	Stream(ctx context.Context, w io.Writer, namespace, taskRun, step string, follow bool) error
+	// Tail reads at most limit bytes of one step's log, without following.
+	Tail(ctx context.Context, namespace, taskRun, step string, limit int) (logs.Excerpt, error)
 }
 
 // Deps are the collaborators of the API.
@@ -51,6 +54,8 @@ type Deps struct {
 
 type handler struct {
 	Deps
+
+	failures failureCache
 }
 
 const heartbeat = 20 * time.Second
@@ -61,7 +66,7 @@ func New(d Deps) http.Handler {
 		d.Now = time.Now
 	}
 
-	h := &handler{d}
+	h := &handler{Deps: d}
 	mux := http.NewServeMux()
 
 	d.Auth.Routes(mux)
@@ -81,7 +86,7 @@ func New(d Deps) http.Handler {
 	guarded("GET /api/v1/runs", h.ready(h.runs))
 	guarded("GET /api/v1/runs/{namespace}/{name}", h.ready(h.run))
 	guarded("GET /api/v1/runs/{namespace}/{name}/tasks/{task}/logs", h.ready(h.logs))
-	guarded("GET /api/v1/events", h.events)
+	guarded("GET /api/v1/events", h.ready(h.events))
 	guarded("POST /api/v1/runs/{namespace}/{name}/rerun", h.ready(h.rerun))
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) { httpx.Error(w, http.StatusNotFound, "not found") })

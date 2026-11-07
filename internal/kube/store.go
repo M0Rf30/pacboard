@@ -348,12 +348,17 @@ func (s *Store) Repositories() []model.RepositorySummary {
 			e := entry{repo: model.RepositoryOf(u)}
 			runs := byIndex(s.runs, byRepository, u.GetNamespace()+"/"+u.GetName())
 			e.repo.RunCount = len(runs)
+			sortNewestFirst(runs)
+
+			summaries := make([]model.RunSummary, len(runs))
+			for i, r := range runs {
+				summaries[i] = model.RunSummaryOf(r, now)
+			}
+
+			e.repo.Insight(summaries)
 
 			if len(runs) > 0 {
-				sortNewestFirst(runs)
-
-				last := model.RunSummaryOf(runs[0], now)
-				e.repo.LastRun = &last
+				e.repo.LastRun = &summaries[0]
 				e.at = model.SortTime(runs[0])
 			}
 

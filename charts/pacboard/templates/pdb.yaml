@@ -1,0 +1,19 @@
+{{- /*
+SPDX-FileCopyrightText: The pacboard Authors
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+*/ -}}
+{{- if and .Values.podDisruptionBudget.enabled (gt (int .Values.replicaCount) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "pacboard.fullname" . }}
+  labels:
+    {{- include "pacboard.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      {{- include "pacboard.selectorLabels" . | nindent 6 }}
+{{- end }}

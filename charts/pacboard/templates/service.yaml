@@ -1,0 +1,19 @@
+{{- /*
+SPDX-FileCopyrightText: The pacboard Authors
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+*/ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pacboard.fullname" . }}
+  labels:
+    {{- include "pacboard.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "pacboard.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http

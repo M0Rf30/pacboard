@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from 'vitest'
-import { absoluteTime, elapsedSeconds, formatDuration, isActive, liveDuration, relativeTime, safeHttpUrl } from './format'
+import { absoluteTime, elapsedSeconds, formatDuration, liveDuration, relativeTime, safeHttpUrl } from './format'
 
 describe('formatDuration', () => {
   it('formats the ranges', () => {
@@ -72,13 +72,6 @@ describe('elapsed and live durations', () => {
     expect(liveDuration('2026-11-07T11:58:00Z', '2026-11-07T11:59:00Z', 'Succeeded', 999, now)).toBe(60)
     expect(liveDuration(null, null, 'Pending', null, now)).toBeNull()
     expect(liveDuration(null, null, 'Skipped', 7, now)).toBe(7)
-  })
-
-  it('knows which statuses are in flight', () => {
-    expect(isActive('Running')).toBe(true)
-    expect(isActive('Pending')).toBe(true)
-    expect(isActive('Failed')).toBe(false)
-    expect(isActive('Skipped')).toBe(false)
   })
 })
 

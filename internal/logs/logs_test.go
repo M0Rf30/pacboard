@@ -28,7 +28,7 @@ type fakePods struct {
 	opened  []string
 }
 
-func (f *fakePods) Open(_ context.Context, _, pod, container string, _ bool) (io.ReadCloser, error) {
+func (f *fakePods) Open(_ context.Context, _, pod, container string, o OpenOptions) (io.ReadCloser, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -44,7 +44,22 @@ func (f *fakePods) Open(_ context.Context, _, pod, container string, _ bool) (io
 
 	f.opened = append(f.opened, container)
 
-	return io.NopCloser(strings.NewReader(f.logs[container])), nil
+	text := f.logs[container]
+
+	if o.TailLines > 0 {
+		lines := strings.SplitAfter(text, "\n")
+		if lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+
+		text = strings.Join(lines[max(len(lines)-int(o.TailLines), 0):], "")
+	}
+
+	if o.LimitBytes > 0 && int64(len(text)) > o.LimitBytes {
+		text = text[:o.LimitBytes]
+	}
+
+	return io.NopCloser(strings.NewReader(text)), nil
 }
 
 type fakeTaskRuns struct {
@@ -178,5 +193,58 @@ func TestNotFollowingSkipsStepsThatDidNotStart(t *testing.T) {
 
 	if want := "==> step: clone <==\na\n==> step: build <==\n(step did not start)\n"; out.String() != want {
 		t.Fatalf("out = %q, want %q", out.String(), want)
+	}
+}
+
+func TestTail(t *testing.T) {
+	long := strings.Repeat("x", 99) + "\n"
+	big := strings.Repeat(long, tailLines+50) // many more than tailLines lines, 200 KB
+
+	pods := &fakePods{logs: map[string]string{"step-clone": "a\nb\n", "step-build": big}}
+	s := &Streamer{Pods: pods, TaskRuns: &fakeTaskRuns{tr: taskRun("pod", "True")}}
+	ctx := context.Background()
+
+	small, err := s.Tail(ctx, "ns", "tr", "clone", 1024)
+	if err != nil || small.Text != "a\nb\n" || !small.FromStart {
+		t.Fatalf("small = %+v, err = %v", small, err)
+	}
+
+	whole, err := s.Tail(ctx, "ns", "tr", "build", len(big))
+	if err != nil || whole.Text != big || !whole.FromStart {
+		t.Fatalf("whole: len %d fromStart %v err %v", len(whole.Text), whole.FromStart, err)
+	}
+
+	cut, err := s.Tail(ctx, "ns", "tr", "build", 1000)
+	if err != nil || cut.FromStart || len(cut.Text) > 1000 || !strings.HasSuffix(cut.Text, long) || !strings.HasPrefix(cut.Text, "xx") {
+		t.Fatalf("cut: len %d fromStart %v err %v", len(cut.Text), cut.FromStart, err)
+	}
+
+	if len(cut.Text)%100 != 0 {
+		t.Fatalf("tail does not start at a line boundary: len %d", len(cut.Text))
+	}
+
+	if _, err := s.Tail(ctx, "ns", "tr", "nope", 10); !errors.Is(err, ErrNoStep) {
+		t.Fatalf("err = %v, want ErrNoStep", err)
+	}
+}
+
+func TestTailGone(t *testing.T) {
+	s := &Streamer{Pods: &fakePods{gone: true}, TaskRuns: &fakeTaskRuns{tr: taskRun("pod", "True")}}
+	if _, err := s.Tail(context.Background(), "ns", "tr", "clone", 10); !errors.Is(err, ErrGone) {
+		t.Fatalf("err = %v, want ErrGone", err)
+	}
+
+	s = &Streamer{Pods: &fakePods{}, TaskRuns: &fakeTaskRuns{tr: taskRun("", "True")}}
+	if _, err := s.Tail(context.Background(), "ns", "tr", "clone", 10); !errors.Is(err, ErrGone) {
+		t.Fatalf("no pod name: err = %v, want ErrGone", err)
+	}
+}
+
+func TestTailStepNotStarted(t *testing.T) {
+	s := &Streamer{Pods: &fakePods{waiting: map[string]int{"step-clone": 1}}, TaskRuns: &fakeTaskRuns{tr: taskRun("pod", "False")}}
+
+	ex, err := s.Tail(context.Background(), "ns", "tr", "clone", 10)
+	if err != nil || ex.Text != "" || !ex.FromStart {
+		t.Fatalf("ex = %+v, err = %v", ex, err)
 	}
 }

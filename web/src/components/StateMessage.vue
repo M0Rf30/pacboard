@@ -6,12 +6,17 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 <script setup lang="ts">
 defineProps<{ loading?: boolean; error?: string; empty?: boolean; emptyText?: string }>()
+defineEmits<{ retry: [] }>()
 </script>
 
 <template>
-  <p v-if="error" role="alert" class="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-    {{ error }}
-  </p>
-  <p v-else-if="loading && empty" class="px-1 py-6 text-sm text-gray-500 dark:text-gray-400">Loading…</p>
-  <p v-else-if="empty" class="px-1 py-6 text-sm text-gray-500 dark:text-gray-400">{{ emptyText ?? 'Nothing to show.' }}</p>
+  <div v-if="error" role="alert" class="callout s-failed text-text text-sm">
+    <span class="min-w-0 flex-1">{{ error }}</span>
+    <button type="button" class="btn sm" :disabled="loading" @click="$emit('retry')">Retry</button>
+  </div>
+  <p v-else-if="loading && empty" class="text-muted px-1 py-6 text-sm">Loading…</p>
+  <div v-else-if="empty" class="text-muted px-4 py-8 text-center">
+    <p>{{ emptyText ?? 'Nothing to show.' }}</p>
+    <slot />
+  </div>
 </template>

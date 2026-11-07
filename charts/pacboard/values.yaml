@@ -1,0 +1,94 @@
+# SPDX-FileCopyrightText: The pacboard Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# -- Number of replicas. pacboard is stateless; each replica keeps its own watch cache.
+replicaCount: 2
+
+image:
+  repository: ghcr.io/m0rf30/pacboard
+  # -- Defaults to the chart appVersion.
+  tag: ""
+  # -- Optional digest (sha256:...); takes precedence over tag.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Namespaces holding Repository CRs and their PipelineRuns. Empty watches all namespaces.
+namespaces: []
+
+auth:
+  # -- "none": no login, read-only, rerun buttons hidden (keep it behind a VPN or an
+  # authenticating proxy). "github": GitHub OAuth login, org membership gate, reruns as the user.
+  mode: none
+  github:
+    # -- GitHub web URL; set for GitHub Enterprise.
+    url: https://github.com
+    # -- Organizations whose members may sign in (required in github mode).
+    allowedOrgs: []
+    # -- Externally visible base URL; the OAuth callback is <publicUrl>/auth/callback.
+    publicUrl: ""
+    # -- Existing Secret with keys github-client-id, github-client-secret, session-key (>= 32 bytes).
+    existingSecret: ""
+
+logLevel: info
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# -- Create the read-only ClusterRole and binding (get/list/watch on Repository, PipelineRun,
+# TaskRun, Pipeline; get on pods/log).
+rbac:
+  create: true
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: pacboard.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+nodeSelector: {}
+tolerations: []
+# -- Defaults to a preferred anti-affinity spreading replicas across nodes.
+affinity: {}

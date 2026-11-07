@@ -20,13 +20,25 @@ export interface Segment {
 
 export type LogLevel = '' | 'error' | 'warning' | 'notice' | 'debug'
 
+export interface AnnotationLocation {
+  file: string
+  line: string
+  col: string
+}
+
+const NO_LOCATION: AnnotationLocation = { file: '', line: '', col: '' }
+
 export interface LogLine {
   id: number
   /** 1-based line number in the raw log. */
   no: number
-  kind: 'text' | 'group' | 'step'
+  kind: 'text' | 'group'
   level: LogLevel
   segments: Segment[]
+  /** `file`/`line`/`col` properties of an annotation (all "" when absent); the message stays in `segments`. */
+  location: AnnotationLocation
+  /** True for the group a `==> step: <name> <==` separator opens (the "All steps" log). */
+  step: boolean
   /** Group id when kind is "group", otherwise -1. */
   groupId: number
   /** Ids of the enclosing groups, outermost first. */
@@ -172,53 +184,155 @@ export function linkify(text: string): TextPart[] {
   return parts
 }
 
-function annotationText(props: string | undefined, message: string): string {
-  if (!props) return message
+function annotationLocation(props: string | undefined): AnnotationLocation {
+  if (!props) return NO_LOCATION
   const kv: Record<string, string> = {}
   for (const pair of props.split(',')) {
     const eq = pair.indexOf('=')
     if (eq > 0) kv[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim()
   }
-  if (!kv.file) return message
-  return `${kv.file}${kv.line ? `:${kv.line}` : ''}: ${message}`
+  return { file: kv.file ?? '', line: kv.line ?? '', col: kv.col ?? '' }
 }
 
-/** Incremental parser: push() raw chunks as they stream in, then flush() at the end. */
-export class LogParser {
-  readonly lines: LogLine[] = []
+/** `file:line:col` of an annotation without its empty parts; "" when it names no file. */
+export function formatLocation(l: AnnotationLocation): string {
+  if (!l.file) return ''
+  return [l.file, l.line, l.line ? l.col : ''].filter(Boolean).join(':')
+}
 
-  private buf = ''
+/** Most lines a parser retains; older ones are dropped (the viewer offers the full log as a raw download). */
+export const MAX_LOG_LINES = 50_000
+
+const FAIL_WORD = /\bFAIL\b/
+
+/** An error annotation or a `FAIL` line: what makes the surrounding groups open by default. */
+function isProblem(l: LogLine): boolean {
+  if (l.kind === 'group') return false
+  return l.level === 'error' || FAIL_WORD.test(lineText(l))
+}
+
+/**
+ * Incremental parser: push() raw chunks as they stream in, then flush() at the end. Everything the
+ * viewer needs per publish (annotation counts, lines per group, default open groups) is updated as
+ * lines arrive, so the work per chunk does not grow with the log. Only the last `maxLines` lines are
+ * retained; `dropped` counts the older ones and line numbers (`no`) keep pointing at the raw log.
+ */
+export class LogParser {
+  /** Retained lines, oldest first; ids are consecutive. */
+  readonly lines: LogLine[] = []
+  /** Group header lines still retained, by group id. */
+  readonly groups = new Map<number, LogLine>()
+
+  private readonly maxLines: number
+  private pending: string[] = []
   private state = freshState()
   private path: readonly number[] = []
   private groupCount = 0
   private rawLines = 0
+  private nextId = 0
+  private droppedLines = 0
+  private errorCount = 0
+  private warningCount = 0
+  private readonly lineCounts = new Map<number, number>()
+  private readonly problem = new Set<number>()
+  private anyProblem = false
+  private firstGroup = -1
+  /** Groups below this id lost their header to the cap; they can no longer be folded, so they stay open. */
+  private groupFloor = 0
+
+  constructor(maxLines: number = MAX_LOG_LINES) {
+    this.maxLines = maxLines
+  }
+
+  /** Lines dropped from the front because of the cap. */
+  get dropped(): number {
+    return this.droppedLines
+  }
+
+  /** Error annotations among the retained lines. */
+  get errors(): number {
+    return this.errorCount
+  }
+
+  /** Warning annotations among the retained lines. */
+  get warnings(): number {
+    return this.warningCount
+  }
+
+  /** Retained lines inside the group, nested groups included (not the header itself). */
+  groupLines(id: number): number {
+    return this.lineCounts.get(id) ?? 0
+  }
+
+  /**
+   * Whether a group starts open: it holds an error annotation or a `FAIL` line. A log without any
+   * such line opens its first group instead, so the first lines are never hidden behind a closed fold.
+   */
+  openByDefault(id: number): boolean {
+    if (id < this.groupFloor || this.problem.has(id)) return true
+    return !this.anyProblem && id === this.firstGroup
+  }
 
   /** Feeds a chunk; returns how many new lines were completed. */
   push(chunk: string): number {
-    this.buf += chunk
-    const before = this.lines.length
+    const before = this.nextId
     let from = 0
-    for (let nl = this.buf.indexOf('\n', from); nl >= 0; nl = this.buf.indexOf('\n', from)) {
-      this.addLine(this.buf.slice(from, nl))
+    for (let nl = chunk.indexOf('\n'); nl >= 0; nl = chunk.indexOf('\n', from)) {
+      const piece = chunk.slice(from, nl)
+      this.addLine(this.pending.length > 0 ? this.takePending() + piece : piece)
       from = nl + 1
     }
-    this.buf = this.buf.slice(from)
-    return this.lines.length - before
+    // The unfinished line is kept in pieces and joined once, when it ends: no rescans or recopies.
+    if (from < chunk.length) this.pending.push(from === 0 ? chunk : chunk.slice(from))
+    this.trim()
+    return this.nextId - before
   }
 
   /** Completes a trailing line without newline. */
   flush(): number {
-    if (this.buf === '') return 0
-    const before = this.lines.length
-    const rest = this.buf
-    this.buf = ''
-    this.addLine(rest)
-    return this.lines.length - before
+    if (this.pending.length === 0) return 0
+    const before = this.nextId
+    this.addLine(this.takePending())
+    this.trim()
+    return this.nextId - before
   }
 
-  /** Ids of every group seen so far. */
-  groupIds(): number[] {
-    return this.lines.filter((l) => l.kind === 'group').map((l) => l.groupId)
+  private takePending(): string {
+    const s = this.pending.join('')
+    this.pending = []
+    return s
+  }
+
+  private trim(): void {
+    const extra = this.lines.length - this.maxLines
+    if (extra <= 0) return
+    for (const l of this.lines.splice(0, extra)) {
+      if (l.level === 'error') this.errorCount--
+      else if (l.level === 'warning') this.warningCount--
+      if (l.kind === 'group') {
+        this.groups.delete(l.groupId)
+        this.lineCounts.delete(l.groupId)
+        this.problem.delete(l.groupId)
+        this.groupFloor = Math.max(this.groupFloor, l.groupId + 1)
+      }
+    }
+    this.droppedLines += extra
+  }
+
+  private record(l: LogLine): void {
+    if (l.level === 'error') this.errorCount++
+    else if (l.level === 'warning') this.warningCount++
+    const bad = isProblem(l)
+    if (bad) this.anyProblem = true
+    for (const id of l.path) {
+      if (id < this.groupFloor) continue
+      this.lineCounts.set(id, (this.lineCounts.get(id) ?? 0) + 1)
+      if (bad) this.problem.add(id)
+    }
+    if (l.kind === 'group') {
+      this.groups.set(l.groupId, l)
+      if (this.firstGroup < 0) this.firstGroup = l.groupId
+    }
   }
 
   private addLine(rawLine: string): void {
@@ -238,7 +352,9 @@ export class LogParser {
     let kind: LogLine['kind'] = 'text'
     let level: LogLevel = ''
     let groupId = -1
-    const path = this.path
+    let location = NO_LOCATION
+    let step = false
+    let path = this.path
 
     const g = GROUP.exec(plain)
     const a = g ? null : ANNOTATION.exec(plain)
@@ -250,21 +366,31 @@ export class LogParser {
       line = g[1]!.trim() || 'group'
     } else if (a) {
       level = a[1] as LogLevel
-      line = annotationText(a[2], a[3]!)
+      location = annotationLocation(a[2])
+      line = a[3]!
     } else if (s) {
-      kind = 'step'
+      // A step separator opens a top-level group: it closes whatever the previous step left open.
+      kind = 'group'
+      step = true
+      path = []
+      groupId = this.groupCount++
+      this.path = [groupId]
       line = s[1]!
     }
 
-    this.lines.push({
-      id: this.lines.length,
+    const out: LogLine = {
+      id: this.nextId++,
       no: this.rawLines,
       kind,
       level,
       segments: this.segmentsOf(line),
+      location,
+      step,
       groupId,
       path,
-    })
+    }
+    this.lines.push(out)
+    this.record(out)
   }
 
   private segmentsOf(line: string): Segment[] {
@@ -287,21 +413,7 @@ export class LogParser {
   }
 }
 
-/** Parses a whole log at once. */
-export function parseLog(text: string): LogLine[] {
-  const p = new LogParser()
-  p.push(text)
-  p.flush()
-  return p.lines
-}
-
 /** Concatenated plain text of a line. */
 export function lineText(l: LogLine): string {
   return l.segments.map((s) => s.text).join('')
-}
-
-/** Lines not hidden inside a collapsed group. */
-export function visibleLines(lines: readonly LogLine[], collapsed: ReadonlySet<number>): LogLine[] {
-  if (collapsed.size === 0) return lines.slice()
-  return lines.filter((l) => !l.path.some((id) => collapsed.has(id)))
 }

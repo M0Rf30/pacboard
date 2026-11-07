@@ -8,42 +8,101 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 import { computed, nextTick, onScopeDispose, ref, shallowRef, triggerRef, watch } from 'vue'
 import { useThrottleFn } from '@vueuse/core'
 import { ApiError, logsUrl, streamLogs } from '@/api/client'
-import { LogParser, visibleLines, type LogLine, type Segment } from '@/lib/logparse'
+import {
+  closedGroups,
+  errorTargetIndex,
+  filterLines,
+  firstErrorIndex,
+  hiddenLineCount,
+  visibleFrom,
+  visibleTail,
+} from '@/lib/logview'
+import { formatLocation, LogParser, MAX_LOG_LINES, type LogLevel, type LogLine, type Segment } from '@/lib/logparse'
+import Icon from './Icon.vue'
+
+/** Ask the viewer to reveal a line once the log has it: the error line, or a given line number. */
+export interface FocusRequest {
+  /** Changes for every request, so asking twice for the same line scrolls twice. */
+  seq: number
+  /** 1-based raw line number, or null. */
+  line: number | null
+  /** True: go to the error (`line` when the log has it, else the first `::error::`). */
+  error: boolean
+}
 
 const props = defineProps<{
   namespace: string
   run: string
   task: string
   taskRun: string
-  /** Step name; "" streams all steps. */
+  /** Step name; "" streams all steps (separated by `==> step <==` headers). */
   step: string
   /** False while the task has not started (no pod yet): nothing is fetched. */
   active: boolean
   /** True while the task runs: asks the backend to stream (follow=1). */
   follow: boolean
+  focus: FocusRequest | null
 }>()
+const highlight = defineModel<number | null>('highlight', { default: null })
 
 type Phase = 'idle' | 'loading' | 'streaming' | 'done' | 'gone' | 'error'
 
 const PAGE = 3000
+const ANN_CLASS: Record<string, string> = { error: 's-failed', warning: 's-running', notice: 's-pending' }
+const ANN_ICON: Record<string, string> = { error: 'failed', warning: 'warn', notice: 'unknown' }
 
 const lines = shallowRef<LogLine[]>([])
 const phase = ref<Phase>('idle')
 const errorMessage = ref('')
-const collapsed = shallowRef<ReadonlySet<number>>(new Set())
-const groupIds = ref<number[]>([])
-const autoScroll = ref(false)
+/** Groups the user opened (true) or closed (false) by hand; the rest follow the default rule. */
+const toggled = shallowRef<ReadonlyMap<number, boolean>>(new Map())
+const query = ref('')
+const annotationsOnly = ref(false)
+const wrap = ref(true)
+const following = ref(false)
 const renderLimit = ref(PAGE)
+const flashNo = ref<number | null>(null)
 const scroller = ref<HTMLElement | null>(null)
 
+// The parser's counters and group state are plain fields; every read below goes through `lines.value`
+// first, so the `triggerRef` in publish() is what re-runs them.
 let parser = new LogParser()
-let raw: string[] = []
 let controller: AbortController | undefined
 let programmaticScroll = false
+let pending: FocusRequest | null = null
+const lastJump: Record<string, number> = {}
 
-const visible = computed(() => visibleLines(lines.value, collapsed.value))
-const shown = computed(() => (visible.value.length > renderLimit.value ? visible.value.slice(-renderLimit.value) : visible.value))
-const hiddenEarlier = computed(() => visible.value.length - shown.value.length)
+function isOpen(id: number): boolean {
+  return toggled.value.get(id) ?? parser.openByDefault(id)
+}
+
+const closed = computed(() => {
+  void lines.value
+  return closedGroups(parser.groups, isOpen)
+})
+function groupLineCount(id: number): number {
+  void lines.value
+  return parser.groupLines(id)
+}
+const levels = computed(() => {
+  void lines.value
+  return { errors: parser.errors, warnings: parser.warnings }
+})
+const droppedLines = computed(() => (void lines.value, parser.dropped))
+const filtering = computed(() => query.value.trim() !== '' || annotationsOnly.value)
+
+// Without a filter only the window at the end is built: the counts come from the parser and the
+// window is collected walking back from the last line.
+const filtered = computed(() => (filtering.value ? filterLines(lines.value, query.value, annotationsOnly.value) : []))
+const visibleCount = computed(() =>
+  filtering.value
+    ? filtered.value.length
+    : lines.value.length - hiddenLineCount(parser.groups, closed.value, (id) => parser.groupLines(id)),
+)
+const shown = computed(() =>
+  filtering.value ? filtered.value.slice(-renderLimit.value) : visibleTail(lines.value, closed.value, renderLimit.value),
+)
+const hiddenEarlier = computed(() => visibleCount.value - shown.value.length)
 
 function scrollToEnd(): void {
   const el = scroller.value
@@ -54,29 +113,34 @@ function scrollToEnd(): void {
 }
 
 function publish(): void {
-  lines.value = parser.lines
   triggerRef(lines)
-  groupIds.value = parser.groupIds()
-  if (autoScroll.value) void nextTick(scrollToEnd)
+  tryFocus(false)
+  if (following.value) void nextTick(scrollToEnd)
 }
 const publishThrottled = useThrottleFn(publish, 200, true, true)
 
 function onScroll(): void {
   const el = scroller.value
-  if (!el || programmaticScroll || !autoScroll.value) return
-  if (el.scrollHeight - el.scrollTop - el.clientHeight > 48) autoScroll.value = false
+  if (!el || programmaticScroll || !following.value) return
+  if (el.scrollHeight - el.scrollTop - el.clientHeight > 48) following.value = false
+}
+
+function resume(): void {
+  following.value = true
+  void nextTick(scrollToEnd)
 }
 
 async function load(): Promise<void> {
   controller?.abort()
+  // A focus request for the previous log is stale; the one for this log (same flush) is set after this runs.
+  pending = null
   parser = new LogParser()
-  raw = []
-  lines.value = []
-  collapsed.value = new Set()
-  groupIds.value = []
+  lines.value = parser.lines
+  toggled.value = new Map()
   renderLimit.value = PAGE
   errorMessage.value = ''
-  autoScroll.value = props.follow
+  following.value = props.follow
+  flashNo.value = null
 
   if (!props.active) {
     phase.value = 'idle'
@@ -97,7 +161,6 @@ async function load(): Promise<void> {
   try {
     await streamLogs(url, mine.signal, (text) => {
       phase.value = 'streaming'
-      raw.push(text)
       parser.push(text)
       void publishThrottled()
     })
@@ -105,10 +168,12 @@ async function load(): Promise<void> {
     parser.flush()
     publish()
     phase.value = 'done'
+    tryFocus(true)
   } catch (e) {
     if (mine.signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) return
     parser.flush()
     publish()
+    tryFocus(true)
     if (e instanceof ApiError && e.status === 404) {
       phase.value = 'gone'
     } else {
@@ -125,31 +190,104 @@ watch(
 )
 onScopeDispose(() => controller?.abort())
 
+/** Index of the line a request points at, or -1 while the log does not have it yet. */
+function resolve(f: FocusRequest, ls: readonly LogLine[], final: boolean): number {
+  if (!f.error) return ls.findIndex((l) => l.no === f.line)
+  if (f.line !== null) {
+    const exact = ls.findIndex((l) => l.no === f.line)
+    // The API's line may still be streaming in; only once the log is complete fall back to the first error.
+    if (exact >= 0 || !final) return exact
+  }
+  return final ? errorTargetIndex(ls, null) : firstErrorIndex(ls)
+}
+
+function tryFocus(final: boolean): void {
+  const f = pending
+  if (!f) return
+  const ls = lines.value
+  const idx = resolve(f, ls, final)
+  if (idx < 0) {
+    if (final) pending = null
+    return
+  }
+  pending = null
+  reveal(ls[idx]!)
+}
+
+/** Opens the groups around the line, widens the window to include it, flags it and scrolls to it. */
+function reveal(l: LogLine): void {
+  query.value = ''
+  annotationsOnly.value = false
+  following.value = false
+  if (l.path.length > 0) {
+    const next = new Map(toggled.value)
+    for (const id of l.path) next.set(id, true)
+    toggled.value = next
+  }
+  const fromHere = visibleFrom(lines.value, closed.value, l)
+  if (fromHere > renderLimit.value) renderLimit.value = fromHere + 50
+  highlight.value = l.no
+  flashNo.value = l.no
+  void nextTick(() => scrollToLine(l.no))
+}
+
+function scrollToLine(no: number): void {
+  const el = scroller.value
+  const row = el?.querySelector<HTMLElement>(`[data-no="${no}"]`)
+  if (!el || !row) return
+  programmaticScroll = true
+  el.scrollTop = Math.max(0, row.offsetTop - el.clientHeight / 2 + row.offsetHeight / 2)
+  requestAnimationFrame(() => (programmaticScroll = false))
+}
+
+watch(
+  () => props.focus,
+  (f) => {
+    if (!f) return
+    pending = f
+    tryFocus(phase.value === 'done')
+  },
+  { immediate: true },
+)
+
+// A permalink (?line=N) scrolls to its line once, when the log first has it.
+if (highlight.value !== null && props.focus === null) pending = { seq: 0, line: highlight.value, error: false }
+
+function jumpTo(level: LogLevel): void {
+  const ls = lines.value
+  const hits: number[] = []
+  ls.forEach((l, i) => {
+    if (l.level === level) hits.push(i)
+  })
+  if (hits.length === 0) return
+  const at = hits.find((i) => i > (lastJump[level] ?? -1)) ?? hits[0]!
+  lastJump[level] = at
+  reveal(ls[at]!)
+}
+
 function toggle(id: number): void {
-  const next = new Set(collapsed.value)
-  if (!next.delete(id)) next.add(id)
-  collapsed.value = next
+  const next = new Map(toggled.value)
+  next.set(id, !isOpen(id))
+  toggled.value = next
 }
 
-function collapseAll(): void {
-  collapsed.value = new Set(groupIds.value)
+function markLine(l: LogLine): void {
+  highlight.value = highlight.value === l.no ? null : l.no
 }
 
-function expandAll(): void {
-  collapsed.value = new Set()
-}
-
-function download(): void {
-  const blob = new Blob(raw, { type: 'text/plain;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${[props.run, props.task, props.step].filter(Boolean).join('-')}.log`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
+// The viewer keeps only the tail of a long log, so "Download raw" fetches the complete text again and
+// lets the browser stream it to disk (a snapshot: no follow). Nothing raw is retained in memory.
+const downloadUrl = computed(() =>
+  logsUrl({
+    namespace: props.namespace,
+    run: props.run,
+    task: props.task,
+    taskRun: props.taskRun || undefined,
+    step: props.step || undefined,
+  }),
+)
+const downloadName = computed(() => `${[props.run, props.task, props.step].filter(Boolean).join('-')}.log`)
+const canDownload = computed(() => lines.value.length > 0)
 
 function segStyle(s: Segment): Record<string, string> | undefined {
   if (!s.color && !s.bg) return undefined
@@ -159,17 +297,9 @@ function segStyle(s: Segment): Record<string, string> | undefined {
   return st
 }
 
-const LEVEL_CLASSES: Record<string, string> = {
-  error: 'bg-red-50 text-red-800 dark:bg-red-950/60 dark:text-red-300',
-  warning: 'bg-yellow-50 text-yellow-800 dark:bg-yellow-950/60 dark:text-yellow-300',
-  notice: 'bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
-  debug: 'text-gray-500 dark:text-gray-400',
-}
-
-function lineClass(l: LogLine): string {
-  if (l.kind === 'group') return 'bg-gray-100 font-semibold dark:bg-gray-800'
-  if (l.kind === 'step') return 'bg-gray-200 font-semibold dark:bg-gray-700'
-  return LEVEL_CLASSES[l.level] ?? ''
+function indent(l: LogLine): Record<string, string> | undefined {
+  const depth = filtering.value ? 0 : l.path.length
+  return depth > 0 ? { paddingLeft: `${depth * 16}px` } : undefined
 }
 
 const statusText = computed(() => {
@@ -178,72 +308,132 @@ const statusText = computed(() => {
       return 'Loading…'
     case 'streaming':
       return props.follow ? 'Streaming…' : 'Loading…'
-    case 'done':
-      return `${lines.value.length} lines`
     default:
-      return ''
+      return `${(lines.value.length + droppedLines.value).toLocaleString()} lines`
   }
 })
+const showLog = computed(() => phase.value !== 'idle' && phase.value !== 'gone' && !(phase.value === 'error' && lines.value.length === 0))
 </script>
 
 <template>
-  <div class="rounded border border-gray-200 dark:border-gray-800">
-    <div class="flex flex-wrap items-center gap-3 border-b border-gray-200 bg-gray-50 px-2 py-1 text-xs dark:border-gray-800 dark:bg-gray-900">
-      <span class="text-gray-600 dark:text-gray-400" role="status">{{ statusText }}</span>
-      <label class="ml-auto flex items-center gap-1.5">
-        <input v-model="autoScroll" type="checkbox" @change="autoScroll && nextTick(scrollToEnd)" />
-        Auto-scroll
-      </label>
-      <template v-if="groupIds.length">
-        <button type="button" class="rounded px-1.5 py-0.5 hover:bg-gray-200 dark:hover:bg-gray-800" @click="collapseAll">Collapse groups</button>
-        <button type="button" class="rounded px-1.5 py-0.5 hover:bg-gray-200 dark:hover:bg-gray-800" @click="expandAll">Expand groups</button>
-      </template>
-      <button type="button" class="rounded px-1.5 py-0.5 hover:bg-gray-200 disabled:opacity-40 dark:hover:bg-gray-800" :disabled="raw.length === 0 && lines.length === 0" @click="download">Download raw</button>
+  <div class="flex min-h-0 min-w-0 flex-col">
+    <div class="border-line flex flex-wrap items-center gap-2 border-b px-3 py-2">
+      <label class="sr-only" for="log-filter">Filter log lines</label>
+      <input
+        id="log-filter"
+        v-model="query"
+        data-filter
+        type="search"
+        class="input w-[220px] max-[900px]:w-full"
+        placeholder="Filter log lines…  ( / )"
+        autocomplete="off"
+      />
+      <button v-if="levels.errors" type="button" class="chip tinted s-failed" :title="`Jump to the next error (${levels.errors})`" @click="jumpTo('error')">
+        <Icon name="failed" sm /><b>{{ levels.errors }}</b> {{ levels.errors === 1 ? 'error' : 'errors' }}
+      </button>
+      <button v-if="levels.warnings" type="button" class="chip tinted s-running" :title="`Jump to the next warning (${levels.warnings})`" @click="jumpTo('warning')">
+        <Icon name="warn" sm /><b>{{ levels.warnings }}</b> {{ levels.warnings === 1 ? 'warning' : 'warnings' }}
+      </button>
+      <button type="button" class="chip" :aria-pressed="annotationsOnly" @click="annotationsOnly = !annotationsOnly">Annotations only</button>
+      <button type="button" class="chip" :aria-pressed="wrap" @click="wrap = !wrap">Wrap</button>
+      <span class="text-faint hidden text-xs min-[1100px]:inline"><kbd>j</kbd> <kbd>k</kbd> step · <kbd>/</kbd> filter · <kbd>e</kbd> error</span>
+      <a v-if="canDownload" :href="downloadUrl" :download="downloadName" class="btn sm ml-auto hover:no-underline">
+        <Icon name="down" sm />Download raw
+      </a>
+      <button v-else type="button" class="btn sm ml-auto" disabled>
+        <Icon name="down" sm />Download raw
+      </button>
     </div>
 
-    <p v-if="phase === 'idle'" class="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">This task has not started yet, so there are no logs.</p>
-    <p v-else-if="phase === 'gone'" class="px-3 py-4 text-sm text-gray-600 dark:text-gray-300">Logs are no longer available: the pod has been removed from the cluster.</p>
-    <p v-else-if="phase === 'error'" role="alert" class="px-3 py-4 text-sm text-red-700 dark:text-red-300">Could not load the logs: {{ errorMessage }}</p>
+    <p v-if="droppedLines > 0" role="status" class="bg-raised border-line text-muted border-b px-4 py-1.5 text-xs">
+      Log truncated: the first {{ droppedLines.toLocaleString() }} lines are not shown (this view keeps the last {{ MAX_LOG_LINES.toLocaleString() }}).
+      <a :href="downloadUrl" :download="downloadName">Download raw</a> for the complete log.
+    </p>
 
-    <div
-      v-if="phase !== 'idle' && phase !== 'gone' && !(phase === 'error' && lines.length === 0)"
-      ref="scroller"
-      class="max-h-[32rem] min-h-16 overflow-auto bg-white font-mono text-xs dark:bg-gray-950"
-      tabindex="0"
-      role="log"
-      aria-label="Task log"
-      @scroll.passive="onScroll"
-    >
-      <button v-if="hiddenEarlier > 0" type="button" class="block w-full bg-gray-100 px-2 py-1 text-left text-blue-700 hover:underline dark:bg-gray-800 dark:text-blue-400" @click="renderLimit += PAGE">
-        Show {{ Math.min(PAGE, hiddenEarlier) }} earlier lines ({{ hiddenEarlier }} hidden)
-      </button>
-      <p v-if="phase === 'done' && lines.length === 0" class="px-3 py-3 text-gray-500 dark:text-gray-400">No output.</p>
-      <div v-for="l in shown" :key="l.id" class="flex min-h-5 gap-2 px-2 leading-5" :class="lineClass(l)">
-        <span class="w-12 shrink-0 select-none text-right text-gray-400 dark:text-gray-500" aria-hidden="true">{{ l.no }}</span>
-        <span class="min-w-0 grow whitespace-pre-wrap break-all" :style="{ paddingLeft: `${l.path.length * 16}px` }">
+    <p v-if="phase === 'idle'" class="text-muted px-4 py-6 text-sm">This task has not started yet, so there are no logs.</p>
+    <p v-else-if="phase === 'gone'" class="text-muted px-4 py-6 text-sm">Logs are no longer available: the pod was removed from the cluster.</p>
+    <p v-else-if="phase === 'error'" role="alert" class="s-failed px-4 py-6 text-sm text-(--c)">Could not load the logs: {{ errorMessage }}</p>
+
+    <div v-if="showLog" class="relative min-h-0">
+      <div
+        ref="scroller"
+        class="log"
+        :class="{ nowrap: !wrap }"
+        tabindex="0"
+        role="region"
+        aria-label="Task log"
+        @scroll.passive="onScroll"
+      >
+        <button v-if="hiddenEarlier > 0" type="button" class="text-accent bg-raised block w-full px-4 py-1 text-left hover:underline" @click="renderLimit += PAGE">
+          Show {{ Math.min(PAGE, hiddenEarlier) }} earlier lines ({{ hiddenEarlier.toLocaleString() }} hidden)
+        </button>
+        <p v-if="phase === 'done' && lines.length === 0" class="text-muted px-4 py-3">No output.</p>
+        <p v-else-if="phase === 'done' && filtering && visibleCount === 0" class="text-muted px-4 py-3">No line matches.</p>
+        <template v-for="l in shown" :key="l.id">
           <button
-            v-if="l.kind === 'group'"
+            v-if="l.kind === 'group' && !filtering"
             type="button"
-            class="mr-1 inline-block w-3 text-left"
-            :aria-expanded="!collapsed.has(l.groupId)"
-            :aria-label="`${collapsed.has(l.groupId) ? 'Expand' : 'Collapse'} group`"
+            class="g"
+            :style="l.path.length ? { top: `${l.path.length * 23}px`, zIndex: 10 - l.path.length } : undefined"
+            :aria-expanded="isOpen(l.groupId)"
+            :data-no="l.no"
             @click="toggle(l.groupId)"
-          >{{ collapsed.has(l.groupId) ? '▸' : '▾' }}</button>
-          <span v-if="l.level" class="mr-1.5 rounded bg-black/10 px-1 font-semibold uppercase dark:bg-white/10">{{ l.level }}</span>
-          <template v-for="(s, i) in l.segments" :key="i">
-            <a
-              v-if="s.href"
-              :href="s.href"
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-              class="underline"
-              :class="s.cls"
-              :style="segStyle(s)"
-            >{{ s.text }}</a>
-            <span v-else :class="s.cls" :style="segStyle(s)">{{ s.text }}</span>
-          </template>
-        </span>
+          >
+            <span class="ln">{{ l.no }}</span>
+            <span class="tt" :style="indent(l)">
+              <Icon name="chev" sm />
+              <span class="min-w-0 truncate" :class="{ 'font-mono': !l.step }">
+                <template v-for="(s, i) in l.segments" :key="i">{{ s.text }}</template>
+              </span>
+              <span class="cnt">{{ groupLineCount(l.groupId).toLocaleString() }} lines</span>
+            </span>
+          </button>
+          <div
+            v-else
+            class="r"
+            :class="[ANN_CLASS[l.level], { ann: l.level && l.level !== 'debug', hl: highlight === l.no, flash: flashNo === l.no, dim: l.level === 'debug' }]"
+            :data-no="l.no"
+            @animationend="flashNo = null"
+          >
+            <button type="button" class="ln" tabindex="-1" :aria-label="`Line ${l.no}`" :title="highlight === l.no ? 'Clear the highlight' : 'Highlight this line'" @click="markLine(l)">{{ l.no }}</button>
+            <span class="tx" :style="indent(l)">
+              <template v-if="l.kind === 'group'">
+                <b class="b">{{ l.segments.map((s) => s.text).join('') }}</b>
+              </template>
+              <template v-else-if="l.level && l.level !== 'debug'">
+                <span class="lv"><Icon :name="ANN_ICON[l.level] ?? 'unknown'" sm />{{ l.level }}</span>
+                <span class="m">
+                  <template v-for="(s, i) in l.segments" :key="i">
+                    <a v-if="s.href" :href="s.href" target="_blank" rel="noopener noreferrer nofollow" :class="s.cls" :style="segStyle(s)">{{ s.text }}</a>
+                    <span v-else :class="s.cls" :style="segStyle(s)">{{ s.text }}</span>
+                  </template>
+                </span>
+                <span v-if="formatLocation(l.location)" class="f">{{ formatLocation(l.location) }}</span>
+              </template>
+              <template v-else>
+                <template v-for="(s, i) in l.segments" :key="i">
+                  <a v-if="s.href" :href="s.href" target="_blank" rel="noopener noreferrer nofollow" :class="s.cls" :style="segStyle(s)">{{ s.text }}</a>
+                  <span v-else :class="s.cls" :style="segStyle(s)">{{ s.text }}</span>
+                </template>
+              </template>
+            </span>
+          </div>
+        </template>
       </div>
+      <button
+        v-if="follow && !following && phase !== 'done'"
+        type="button"
+        class="btn primary absolute bottom-3 left-1/2 -translate-x-1/2 shadow-pop"
+        @click="resume"
+      >
+        <Icon name="down" sm />Jump to latest
+      </button>
+    </div>
+
+    <div class="border-line bg-surface text-muted flex flex-wrap items-center gap-x-5 gap-y-1 border-t px-4 py-1.5 font-mono text-xs">
+      <span role="status">{{ statusText }}</span>
+      <span v-if="follow && following && phase !== 'done'" class="text-run">● following</span>
+      <slot name="footer" />
     </div>
   </div>
 </template>

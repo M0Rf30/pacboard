@@ -68,11 +68,6 @@ export function liveDuration(
   return serverSeconds ?? null
 }
 
-/** Whether a status means the work is still in flight. */
-export function isActive(status: NodeStatus): boolean {
-  return status === 'Running' || status === 'Pending'
-}
-
 /** The URL normalised when it is an absolute http(s) URL with a host; "" for anything else. */
 export function safeHttpUrl(raw: string | null | undefined): string {
   if (!raw) return ''

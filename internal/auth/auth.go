@@ -93,11 +93,28 @@ type Service struct {
 
 	mu      sync.Mutex
 	members map[string]time.Time // login -> membership verified until
+
+	// Re-checks against GitHub: one in flight per session, failures remembered briefly, so an
+	// expired cache entry or a GitHub outage does not turn every concurrent request into a call.
+	flights    map[string]*memberFlight
+	memberErrs map[string]memberErr
+}
+
+type memberFlight struct {
+	done   chan struct{}
+	member bool
+	err    error
+}
+
+type memberErr struct {
+	err   error
+	until time.Time
 }
 
 // New validates cfg. In mode none with a DevToken it resolves the token's user from GitHub.
 func New(ctx context.Context, cfg Config) (*Service, error) {
-	s := &Service{cfg: cfg, log: cfg.Logger, now: cfg.Now, members: map[string]time.Time{}}
+	s := &Service{cfg: cfg, log: cfg.Logger, now: cfg.Now, members: map[string]time.Time{},
+		flights: map[string]*memberFlight{}, memberErrs: map[string]memberErr{}}
 	if s.log == nil {
 		s.log = slog.Default()
 	}
@@ -324,7 +341,9 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 		s.forget(sess.Login)
 	}
 
+	// Cookies only: sessions are stateless, a copied cookie stays valid until it expires.
 	s.clearCookie(w, CookieSession, "/")
+	s.clearCookie(w, CookieCSRF, "/")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -344,6 +363,64 @@ func (s *Service) checkMembership(ctx context.Context, token string) (bool, erro
 	}
 
 	return false, firstErr
+}
+
+// membershipErrorTTL is how long a failed re-check (GitHub down, token revoked) is remembered.
+const membershipErrorTTL = 5 * time.Second
+
+// verifyMembership is checkMembership for a session re-check: concurrent callers with the same
+// session share one GitHub round trip, and a failure is answered from memory for a few seconds.
+// The key includes the token so that a revoked token never fails the user's other sessions.
+func (s *Service) verifyMembership(ctx context.Context, login, token string) (bool, error) {
+	key := login + "\x00" + token
+
+	s.mu.Lock()
+
+	if e, ok := s.memberErrs[key]; ok && s.now().Before(e.until) {
+		s.mu.Unlock()
+
+		return false, e.err
+	}
+
+	if fl, ok := s.flights[key]; ok {
+		s.mu.Unlock()
+
+		select {
+		case <-fl.done:
+			return fl.member, fl.err
+		case <-ctx.Done():
+			return false, fmt.Errorf("membership check: %w", ctx.Err())
+		}
+	}
+
+	fl := &memberFlight{done: make(chan struct{})}
+	s.flights[key] = fl
+	s.mu.Unlock()
+
+	// The answer is shared, so this request giving up must not fail the others; the GitHub
+	// client has its own timeout.
+	fl.member, fl.err = s.checkMembership(context.WithoutCancel(ctx), token)
+
+	s.mu.Lock()
+	delete(s.flights, key)
+
+	if fl.err != nil {
+		now := s.now()
+		if len(s.memberErrs) > pruneAbove {
+			for k, e := range s.memberErrs {
+				if !now.Before(e.until) {
+					delete(s.memberErrs, k)
+				}
+			}
+		}
+
+		s.memberErrs[key] = memberErr{err: fl.err, until: now.Add(membershipErrorTTL)}
+	}
+
+	s.mu.Unlock()
+	close(fl.done)
+
+	return fl.member, fl.err
 }
 
 func (s *Service) remember(login string) {
@@ -414,7 +491,7 @@ func (s *Service) identify(r *http.Request) (Actor, outcome) {
 		return actor, outcomeOK
 	}
 
-	member, err := s.checkMembership(r.Context(), sess.Token)
+	member, err := s.verifyMembership(r.Context(), sess.Login, sess.Token)
 
 	var apiErr *github.APIError
 

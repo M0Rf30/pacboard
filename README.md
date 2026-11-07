@@ -73,6 +73,18 @@ Every flag can also be set with an environment variable `PACBOARD_<FLAG>` (upper
 
 ## Deploy to Kubernetes
 
+With Helm (chart published to ghcr.io on every release, listed on Artifact Hub):
+
+```sh
+helm install pacboard oci://ghcr.io/m0rf30/charts/pacboard \
+  --namespace pacboard --create-namespace --set 'namespaces={tekton-ci}'
+```
+
+The chart defaults to `auth.mode: none`; see [`charts/pacboard/README.md`](charts/pacboard/README.md)
+for GitHub login and the Pipelines-as-Code `custom-console-*` settings that link check runs here.
+
+Or with plain kustomize:
+
 ```sh
 kubectl create namespace pacboard
 kubectl -n pacboard create secret generic pacboard \
@@ -99,7 +111,13 @@ distroless non-root runtime).
   session lives). Anonymous requests get 401, non-members 403.
 - **Sessions** are AES-256-GCM encrypted cookies (`HttpOnly`, `SameSite=Lax`) holding login, avatar
   and the user's GitHub token. They are stateless: restarting with another `--session-key` logs
-  everybody out.
+  everybody out. A session is valid until it expires (24 hours); logout only clears the
+  `pacboard_session` and `pacboard_csrf` cookies in the browser and the server-side membership
+  cache entry, it cannot revoke a cookie that was copied. To end a session for good, revoke the
+  user's authorization of the OAuth app on GitHub (the next membership re-check fails) or rotate
+  `--session-key`.
+- **Streams** (log and event streams) have a 30 second deadline per write, so a client that stops
+  reading is dropped instead of holding a goroutine and a pod-log stream open.
 - **CSRF**: unsafe requests need the header `X-Pacboard-CSRF` equal to the `pacboard_csrf` cookie.
 - **Reruns** post exactly `/retest <name>` or `/test <name>`, where the name is validated, as the
   user, with the user's token. pacboard has no service credentials to GitHub.
@@ -108,6 +126,9 @@ distroless non-root runtime).
 - **Headers**: a strict `Content-Security-Policy`, `X-Frame-Options: DENY`, `nosniff`, `no-store`
   on API responses.
 - **Cluster access** is read-only; pod logs are served only for TaskRuns of a known PipelineRun.
+- A failed run's detail reads the last 2 MiB of the failed step's log once (cached per run version)
+  to show the `::error::` message; concurrent requests share that read, and if the pod is gone (or
+  the log is briefly unreadable) it falls back to the run's condition message.
 - Run logs can contain secrets that a build prints. Every allowed organization member can read them.
 
 ## Development

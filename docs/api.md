@@ -62,6 +62,28 @@ interface RepositorySummary {
   concurrencyLimit: number | null;
   lastRun: RunSummary | null;
   runCount: number;          // PipelineRuns currently in the cluster for this Repository
+  recent: RunBrief[];        // up to 10 retained runs, newest first (history strip)
+  typicalDurationSeconds: number | null; // median duration of retained Succeeded runs; null when none
+  intermittent: boolean;     // some commit (sha) has both a Succeeded and a Failed run among retained runs
+}
+
+interface RunBrief {
+  name: string;
+  status: RunStatus;
+  startTime: string | null;
+  durationSeconds: number | null;
+}
+
+// Why a run failed, for the banner above the graph. Null unless status is Failed.
+interface Failure {
+  task: string;              // first failed GraphNode.id (by completionTime), "" when the run failed with no failed task (timeout, validation)
+  taskRun: string;           // its (first failed matrix) TaskRun name
+  step: string;              // first step with a non-zero exit code, "" when unknown
+  exitCode: number | null;
+  message: string;           // first `::error::` annotation text of that step's log (without the prefix), else the
+                             // last non-empty log line; falls back to the run's Succeeded condition message. Max 500 chars.
+  line: number | null;       // 1-based line number of that text in the step log (for "go to error line"); null when not from the log
+  skippedBecause: number;    // GraphNodes Skipped after the failure (reason not "When Expressions evaluated to false")
 }
 
 interface Step {
@@ -98,6 +120,8 @@ interface RunDetail {
   edges: GraphEdge[];        // transitive duplicates removed; "finally" edges link every leaf of the main graph to each finally task
   params: { name: string; value: string }[];  // PipelineRun spec.params, values stringified
   canRerun: boolean;         // current user may post rerun comments for this run
+  typicalDurationSeconds: number | null; // same as the Repository's
+  failure: Failure | null;
 }
 
 interface Me {
@@ -135,6 +159,9 @@ Remove an edge A→C when another path A→…→C exists (transitive reduction)
 | GET | `/auth/callback` | sets session, 302 to `next` (same-origin paths only) |
 | POST | `/auth/logout` | clears session, 204 (CSRF header required) |
 | GET | `/healthz`, `/readyz` | 200 when informers synced (`readyz`) |
+
+Until the informers have synced, every data route and `/api/v1/events` answer 503
+`{"error":"informers not synced yet"}`; clients retry with backoff.
 
 Errors: JSON `{"error": "<message>"}` with the HTTP status.
 
