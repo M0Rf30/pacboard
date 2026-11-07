@@ -17,6 +17,7 @@ path = [
   "internal/dag/testdata/**",
   "charts/pacboard/values.schema.json",
   "charts/pacboard/templates/NOTES.txt",
+  "docs/screenshots/*.png",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "The pacboard Authors"

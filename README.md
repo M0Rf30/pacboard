@@ -8,9 +8,18 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 A dashboard for [Tekton Pipelines-as-Code](https://pipelinesascode.com) (PaC) runs.
 
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/pacboard)](https://artifacthub.io/packages/search?repo=pacboard)
+
+![A failed run: the failure banner shows the error line from the failed step's log, the graph
+highlights the failed task and the log opens on it](docs/screenshots/run-failed.png)
+
 The Tekton Dashboard lists PipelineRuns as a flat list and knows nothing about GitHub. pacboard
 adds what PaC users miss:
 
+- **Repository health at a glance**: failing repositories first, the last runs of each as a
+  strip, typical duration, and a flag for repositories whose same commit both passed and failed.
+- **Why it failed, above the fold**: the failed task and step and the first `::error::` line of its
+  log, with a jump to that line.
 - **Per-repository view** of runs, filterable by pull request, branch and status.
 - **Links back to GitHub**: repository, commit, pull request and check run.
 - **A correct DAG** of each run: `runAfter`, result references, `finally` tasks, matrix fan-out,
@@ -23,6 +32,15 @@ pacboard is read-only towards the cluster. It is a Go binary with the Vue UI emb
 database. State comes from informer caches on `Repository`, `PipelineRun` and `TaskRun` objects.
 
 The HTTP contract between backend and UI is [docs/api.md](docs/api.md).
+
+| Repositories | Runs of a repository |
+|---|---|
+| ![Repositories grouped by health with run history and typical duration](docs/screenshots/repositories.png) | ![Runs of one repository with PR, commit, event and duration against the typical one](docs/screenshots/repository-runs.png) |
+
+![A succeeded run in the light theme: result-reference edges, matrix fan-out, a skipped task,
+a finally task, and the log of the selected step](docs/screenshots/run-succeeded.png)
+
+Screenshots use synthetic demo data.
 
 ## Quick start (local)
 
