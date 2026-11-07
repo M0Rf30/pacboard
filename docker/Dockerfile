@@ -55,5 +55,6 @@ LABEL org.opencontainers.image.title="pacboard" \
 COPY --from=builder /pacboard /pacboard
 
 EXPOSE 8080
-USER nonroot:nonroot
+# Numeric, so the kubelet can verify runAsNonRoot ("nonroot" by name is rejected).
+USER 65532:65532
 ENTRYPOINT ["/pacboard"]
