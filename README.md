@@ -98,6 +98,18 @@ helm install pacboard oci://ghcr.io/m0rf30/charts/pacboard \
   --namespace pacboard --create-namespace --set 'namespaces={tekton-ci}'
 ```
 
+Release images and charts are signed keyless with [cosign](https://github.com/sigstore/cosign)
+from this repository's CI:
+
+```sh
+cosign verify ghcr.io/m0rf30/pacboard:<version> \
+  --certificate-identity-regexp '^https://github.com/M0Rf30/pacboard/\.github/workflows/ci\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+cosign verify ghcr.io/m0rf30/charts/pacboard:<chart-version> \
+  --certificate-identity-regexp '^https://github.com/M0Rf30/pacboard/\.github/workflows/ci\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
 The chart defaults to `auth.mode: none`; see [`charts/pacboard/README.md`](charts/pacboard/README.md)
 for GitHub login and the Pipelines-as-Code `custom-console-*` settings that link check runs here.
 
