@@ -537,6 +537,38 @@ func (s *Service) Authenticate(next http.Handler) http.Handler {
 	})
 }
 
+// SessionRemaining is how long the request's session stays valid, for requests that outlive their
+// authentication (the event stream). It reports false in mode none, which has no sessions, and for
+// a request without a valid session.
+func (s *Service) SessionRemaining(r *http.Request) (time.Duration, bool) {
+	if s.cfg.Mode != ModeGitHub {
+		return 0, false
+	}
+
+	sess, ok := s.readSession(r)
+	if !ok {
+		return 0, false
+	}
+
+	// readSession accepts the session through the whole second of its expiry.
+	return time.Unix(sess.Expires+1, 0).Sub(s.now()), true
+}
+
+// Revalidate re-runs the access check of Authenticate for a long-lived request: false once the
+// session expired or its token was revoked, or the user left the organization. It goes through the same
+// membership cache as every request, so a call costs a GitHub round trip at most once per
+// membership window. A check that fails (GitHub unreachable, rate limited) proves nothing against
+// the user, so it keeps the request alive; the next call tries again. Mode none always passes.
+func (s *Service) Revalidate(r *http.Request) bool {
+	if s.cfg.Mode != ModeGitHub {
+		return true
+	}
+
+	_, res := s.identify(r)
+
+	return res == outcomeOK || res == outcomeError
+}
+
 // Me describes the caller for GET /api/v1/me; it never fails.
 func (s *Service) Me(r *http.Request) model.Me {
 	me := model.Me{AuthMode: s.cfg.Mode}

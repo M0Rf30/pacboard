@@ -60,7 +60,7 @@ const detail = computed(() => {
       <div v-else class="text-muted">{{ detail }}</div>
     </div>
     <button v-if="isFailure && failure && failure.task" type="button" class="btn" @click="$emit('goToError')">
-      <Icon name="down" sm />Go to error line <kbd>e</kbd>
+      <Icon name="down" sm />{{ failure.line !== null ? 'Go to error line' : 'Go to failed step' }} <kbd>e</kbd>
     </button>
   </section>
 </template>

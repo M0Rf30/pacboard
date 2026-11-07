@@ -28,6 +28,11 @@ function enqueue(router: Router, key: string, value: string): void {
   batch.set(key, value)
 }
 
+/** Sets (or, for "", removes) several query keys; with other writes of the same tick it is one `router.replace`. */
+export function setQueryParams(router: Router, patch: Readonly<Record<string, string>>): void {
+  for (const [k, v] of Object.entries(patch)) enqueue(router, k, v)
+}
+
 /**
  * A string ref bound to one URL query parameter (empty string removes it), so filters are shareable.
  * Writes to several refs in the same tick end up in a single `router.replace`.

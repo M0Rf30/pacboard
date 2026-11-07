@@ -286,13 +286,30 @@ func (h *handler) events(w http.ResponseWriter, r *http.Request) {
 	tick := time.NewTicker(heartbeat)
 	defer tick.Stop()
 
+	// The stream outlives the request's authentication: it ends with the session, and each
+	// heartbeat re-checks membership (cached, so GitHub is not asked more than any request would).
+	var expired <-chan time.Time
+
+	if remaining, ok := h.Auth.SessionRemaining(r); ok {
+		t := time.NewTimer(remaining)
+		defer t.Stop()
+
+		expired = t.C
+	}
+
 	for {
 		var msg string
 
 		select {
 		case <-r.Context().Done():
 			return
+		case <-expired:
+			return
 		case <-tick.C:
+			if !h.Auth.Revalidate(r) {
+				return
+			}
+
 			msg = ": heartbeat\n\n"
 		case e := <-events:
 			data, err := json.Marshal(e)

@@ -18,16 +18,21 @@ func TestErrorFromLog(t *testing.T) {
 		line      int // 0 = nil
 		ok        bool
 	}{
-		"plain":          {"a\n::error::boom\n", true, "boom", 2, true},
-		"params":         {"::error file=a.go,line=3,col=1::bad\n", true, "bad", 1, true},
-		"first wins":     {"::error::one\n::error::two\n", true, "one", 1, true},
-		"timestamp":      {"2026-01-01T00:00:00Z ::error::late\n", true, "late", 1, true},
-		"ansi":           {"\x1b[31;1m::error::\x1b[0mred\x1b[K\n", true, "red", 1, true},
-		"warning ignore": {"::warning::w\nlast line\n\n", true, "last line", 2, true},
-		"not from start": {"x\n::error::boom\n", false, "boom", 0, true},
-		"empty":          {"", true, "", 0, false},
-		"blank":          {"\n \n", true, "", 0, false},
-		"crlf":           {"x\r\ndone\r\n", true, "done", 2, true},
+		"plain":            {"a\n::error::boom\n", true, "boom", 2, true},
+		"params":           {"::error file=a.go,line=3,col=1::bad\n", true, "bad", 1, true},
+		"first wins":       {"::error::one\n::error::two\n", true, "one", 1, true},
+		"not anchored":     {"+ echo \"::error::x\"\n", true, "+ echo \"::error::x\"", 1, true},
+		"unterminated osc": {"a\x1b]0;title\nb\n::error::boom\nc\x07\n", true, "boom", 3, true},
+		"endgroup last":    {"::group::g\nfailed here\n::endgroup::\n", true, "failed here", 2, true},
+		"group only":       {"::group::g\n::endgroup::\n", true, "", 0, false},
+		"cr rewrite":       {"10%\r50%\r100% done\n", true, "100% done", 1, true},
+		"cr rewrite error": {"::error::x\rprogress\r::error::real\n", true, "real", 1, true},
+		"ansi":             {"\x1b[31;1m::error::\x1b[0mred\x1b[K\n", true, "red", 1, true},
+		"warning ignore":   {"::warning::w\nlast line\n\n", true, "last line", 2, true},
+		"not from start":   {"x\n::error::boom\n", false, "boom", 0, true},
+		"empty":            {"", true, "", 0, false},
+		"blank":            {"\n \n", true, "", 0, false},
+		"crlf":             {"x\r\ndone\r\n", true, "done", 2, true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			msg, line, ok := ErrorFromLog(tt.log, tt.fromStart)

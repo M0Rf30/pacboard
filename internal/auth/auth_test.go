@@ -29,6 +29,7 @@ type fakeGitHub struct {
 	mu          sync.Mutex
 	members     map[string]bool // login -> active member of "acme"
 	revoked     bool            // memberships answer 401
+	status      int             // when set, memberships answer this status
 	membership  int             // membership calls seen
 	gate        chan struct{}   // when set, membership answers wait until it is closed
 	lastVerifer string
@@ -62,7 +63,7 @@ func newFakeGitHub(t *testing.T, members map[string]bool) *fakeGitHub {
 	mux.HandleFunc("GET /api/v3/user/memberships/orgs/{org}", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.membership++
-		revoked, gate := f.revoked, f.gate
+		revoked, gate, status := f.revoked, f.gate, f.status
 		f.mu.Unlock()
 
 		if gate != nil {
@@ -72,6 +73,8 @@ func newFakeGitHub(t *testing.T, members map[string]bool) *fakeGitHub {
 		login := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer tok-")
 
 		switch {
+		case status != 0:
+			w.WriteHeader(status)
 		case revoked:
 			w.WriteHeader(http.StatusUnauthorized)
 		case r.PathValue("org") == "acme" && f.members[login]:
@@ -642,5 +645,92 @@ func TestNoneAndDevTokenModes(t *testing.T) {
 
 	if a, err := dev.Actor(req); err != nil || a.Token != "tok-devuser" || a.Login != "devuser" {
 		t.Fatalf("dev actor = %+v, %v", a, err)
+	}
+}
+
+func TestStreamRevalidationAndSessionRemaining(t *testing.T) {
+	f := newFakeGitHub(t, map[string]bool{"alice": true})
+	s := newService(t, f)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	h := app(s)
+
+	_, cookies := loginAs(t, h, f, "alice", "/")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+
+	remaining, ok := s.SessionRemaining(req)
+	if !ok || remaining < sessionTTL-time.Second || remaining > sessionTTL+time.Second {
+		t.Fatalf("remaining = %v, %v", remaining, ok)
+	}
+
+	// Within the membership window the stream is re-checked from the cache.
+	calls := f.membership
+
+	if !s.Revalidate(req) || f.membership != calls {
+		t.Fatalf("revalidate within the cache window: GitHub calls %d -> %d", calls, f.membership)
+	}
+
+	// After the window GitHub is asked; a failing check does not end the stream, a removal does.
+	now = now.Add(membershipTTL + time.Second)
+
+	f.mu.Lock()
+	f.members["alice"] = false
+	f.mu.Unlock()
+
+	if s.Revalidate(req) {
+		t.Fatal("removed member kept the stream")
+	}
+
+	// An expired session ends it, too.
+	now = now.Add(sessionTTL + 2*time.Second)
+
+	if s.Revalidate(req) {
+		t.Fatal("expired session kept the stream")
+	}
+
+	if _, ok := s.SessionRemaining(req); ok {
+		t.Fatal("expired session has remaining time")
+	}
+}
+
+func TestStreamRevalidationSurvivesGitHubErrors(t *testing.T) {
+	f := newFakeGitHub(t, map[string]bool{"alice": true})
+	s := newService(t, f)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	h := app(s)
+
+	_, cookies := loginAs(t, h, f, "alice", "/")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+
+	now = now.Add(membershipTTL + time.Second)
+
+	f.mu.Lock()
+	f.status = http.StatusBadGateway
+	f.mu.Unlock()
+
+	if !s.Revalidate(req) {
+		t.Fatal("a GitHub outage ended the stream")
+	}
+}
+
+func TestModeNoneStreamsNeverExpire(t *testing.T) {
+	s, err := New(context.Background(), Config{Mode: ModeNone})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil)
+
+	if _, ok := s.SessionRemaining(req); ok || !s.Revalidate(req) {
+		t.Fatal("mode none has no sessions to expire")
 	}
 }

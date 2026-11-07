@@ -46,3 +46,14 @@ describe('useQueryRef', () => {
     expect(refs.status.value).toBe('Failed')
   })
 })
+
+describe('setQueryParams', () => {
+  it('writes several keys of one tick, including a removal, in one replace', async () => {
+    const { setQueryParams } = await import('./useQueryRef')
+    const { router, replace } = await setup('/?task=a&line=45')
+    setQueryParams(router, { task: 'b', step: 's', line: '' })
+    setQueryParams(router, { line: '45' })
+    await vi.waitFor(() => expect(router.currentRoute.value.query).toEqual({ task: 'b', step: 's', line: '45' }))
+    expect(replace).toHaveBeenCalledTimes(1)
+  })
+})

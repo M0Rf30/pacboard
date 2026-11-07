@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -63,6 +64,21 @@ type Store struct {
 	runs      []cache.SharedIndexInformer
 	taskRuns  []cache.SharedIndexInformer
 	ready     atomic.Bool
+
+	// gen counts informer events; Repositories reuses its result while gen is unchanged.
+	gen       atomic.Uint64
+	reposMu   sync.Mutex
+	reposMemo repositoriesMemo
+}
+
+// repositoriesMemo is a computed Repositories result. Durations of runs in progress depend on the
+// clock, so a result that shows one is also tied to the second it was computed in.
+type repositoriesMemo struct {
+	valid   bool
+	gen     uint64
+	second  int64
+	running bool
+	out     []model.RepositorySummary
 }
 
 // NewStore prepares the informers for the namespaces (all when empty); call Start to run them.
@@ -166,6 +182,9 @@ func (s *Store) watch(kind string, inf cache.SharedIndexInformer) error {
 }
 
 func (s *Store) notify(kind string, obj any) {
+	// Before the ready check: changes during the initial list invalidate the cache too.
+	s.gen.Add(1)
+
 	u, ok := obj.(*unstructured.Unstructured)
 	if !ok || !s.ready.Load() {
 		return
@@ -328,9 +347,41 @@ func sortNewestFirst(objs []*unstructured.Unstructured) {
 	})
 }
 
-// Repositories lists the PaC Repositories with their latest run, newest activity first.
+// Repositories lists the PaC Repositories with their latest run, newest activity first. Summarizing
+// every run of every repository is the cost of a call, so the result is kept until the next informer
+// event (and, while it shows a run in progress, until the next second). Callers must not modify it.
 func (s *Store) Repositories() []model.RepositorySummary {
-	now := s.now()
+	s.reposMu.Lock()
+	defer s.reposMu.Unlock()
+
+	// Read before computing: an event that lands meanwhile makes the result stale on the next call.
+	gen, now := s.gen.Load(), s.now()
+
+	m := &s.reposMemo
+	if m.valid && m.gen == gen && (!m.running || m.second == now.Unix()) {
+		return m.out
+	}
+
+	out := s.computeRepositories(now)
+
+	running := false
+
+	for _, r := range out {
+		if r.LastRun != nil && r.LastRun.Status == model.StatusRunning {
+			running = true
+		}
+
+		for _, b := range r.Recent {
+			running = running || b.Status == model.StatusRunning
+		}
+	}
+
+	*m = repositoriesMemo{valid: true, gen: gen, second: now.Unix(), running: running, out: out}
+
+	return out
+}
+
+func (s *Store) computeRepositories(now time.Time) []model.RepositorySummary {
 	type entry struct {
 		repo model.RepositorySummary
 		at   time.Time

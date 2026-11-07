@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -114,6 +115,12 @@ func newGitHub(t *testing.T) *fakeGitHub {
 	mux.HandleFunc("GET /api/v3/user", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"login": "devuser", "avatar_url": "https://avatars.example/devuser"})
 	})
+	mux.HandleFunc("POST /login/oauth/access_token", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "tok-devuser"})
+	})
+	mux.HandleFunc("GET /api/v3/user/memberships/orgs/{org}", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"state": "active"})
+	})
 	mux.HandleFunc("POST /api/v3/repos/{org}/{repo}/issues/{n}/comments", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Body string `json:"body"`
@@ -152,6 +159,13 @@ type env struct {
 func newEnv(t *testing.T, mode string, devToken bool, lg LogStreamer) *env {
 	t.Helper()
 
+	return newEnvClock(t, mode, devToken, lg, nil)
+}
+
+// newEnvClock is newEnv with the auth service running on now (nil: the real clock).
+func newEnvClock(t *testing.T, mode string, devToken bool, lg LogStreamer, now func() time.Time) *env {
+	t.Helper()
+
 	gh := newGitHub(t)
 
 	client, err := github.New(gh.srv.URL)
@@ -159,7 +173,7 @@ func newEnv(t *testing.T, mode string, devToken bool, lg LogStreamer) *env {
 		t.Fatal(err)
 	}
 
-	cfg := auth.Config{Mode: mode, GitHub: client, Logger: slog.New(slog.DiscardHandler)}
+	cfg := auth.Config{Mode: mode, GitHub: client, Logger: slog.New(slog.DiscardHandler), Now: now}
 
 	switch {
 	case mode == auth.ModeGitHub:
@@ -633,6 +647,140 @@ func authNone(t *testing.T) *auth.Service {
 	}
 
 	return a
+}
+
+// login runs the OAuth web flow against the fake GitHub and returns the session cookie.
+func (e *env) login(t *testing.T) *http.Cookie {
+	t.Helper()
+
+	rec := e.do(http.MethodGet, "/auth/login", "", nil)
+
+	var oauth *http.Cookie
+
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "pacboard_oauth" {
+			oauth = c
+		}
+	}
+
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	if rec.Code != http.StatusFound || err != nil || oauth == nil {
+		t.Fatalf("login: %d %v", rec.Code, err)
+	}
+
+	cb := e.do(http.MethodGet, "/auth/callback?code=x&state="+url.QueryEscape(loc.Query().Get("state")), "", nil, oauth)
+
+	for _, c := range cb.Result().Cookies() {
+		if c.Name == auth.CookieSession {
+			return c
+		}
+	}
+
+	t.Fatalf("callback: %d %s", cb.Code, cb.Body)
+
+	return nil
+}
+
+// openEvents opens the event stream with the session and returns a channel that is closed when the
+// server ends it.
+func openEvents(t *testing.T, e *env, session *http.Cookie) <-chan struct{} {
+	t.Helper()
+
+	srv := httptest.NewServer(e.h)
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	t.Cleanup(cancel)
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/api/v1/events", nil)
+	req.AddCookie(session)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("events status = %d", resp.StatusCode)
+	}
+
+	ended := make(chan struct{})
+
+	go func() {
+		defer close(ended)
+		defer resp.Body.Close()
+
+		_, _ = io.Copy(io.Discard, resp.Body)
+	}()
+
+	return ended
+}
+
+func awaitEnd(t *testing.T, ended <-chan struct{}, within time.Duration, why string) {
+	t.Helper()
+
+	select {
+	case <-ended:
+	case <-time.After(within):
+		t.Fatalf("event stream still open: %s", why)
+	}
+}
+
+// The stream ends on its own when the session expires, without waiting for a heartbeat.
+func TestEventsStreamEndsWhenSessionExpires(t *testing.T) {
+	var mu sync.Mutex
+
+	offset := time.Duration(0)
+	e := newEnvClock(t, auth.ModeGitHub, false, nil, func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return time.Now().Add(offset)
+	})
+
+	session := e.login(t)
+
+	// Jump the clock to 1.5s before the session's 24h end, then open the stream: it must close
+	// by itself when the clock gets there, long before the 20s heartbeat.
+	mu.Lock()
+	offset = 24*time.Hour - 1500*time.Millisecond
+	mu.Unlock()
+
+	ended := openEvents(t, e, session)
+
+	awaitEnd(t, ended, 8*time.Second, "session expired")
+}
+
+// A heartbeat re-checks the session: one that expired meanwhile ends the stream.
+func TestEventsStreamRechecksOnHeartbeat(t *testing.T) {
+	old := heartbeat
+	heartbeat = 50 * time.Millisecond
+
+	t.Cleanup(func() { heartbeat = old })
+
+	var mu sync.Mutex
+
+	offset := time.Duration(0)
+	e := newEnvClock(t, auth.ModeGitHub, false, nil, func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return time.Now().Add(offset)
+	})
+
+	ended := openEvents(t, e, e.login(t))
+
+	select {
+	case <-ended:
+		t.Fatal("stream ended while the session was valid")
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	mu.Lock()
+	offset = 48 * time.Hour
+	mu.Unlock()
+
+	awaitEnd(t, ended, 5*time.Second, "heartbeat after expiry")
 }
 
 func TestEventsStream(t *testing.T) {

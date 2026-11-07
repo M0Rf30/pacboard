@@ -9,8 +9,10 @@ import { computed } from 'vue'
 import type { GraphNode } from '@/api/types'
 import { useNow } from '@/composables/useNow'
 import { elapsedSeconds, formatDuration } from '@/lib/format'
+import type { FocusRequest } from '@/lib/logview'
+import { resolveTaskRun } from '@/lib/runview'
 import Duration from './Duration.vue'
-import LogViewer, { type FocusRequest } from './LogViewer.vue'
+import LogViewer from './LogViewer.vue'
 import StatusBadge from './StatusBadge.vue'
 import StepTimeline from './StepTimeline.vue'
 
@@ -35,7 +37,7 @@ const stepDidNotRun = computed(() => selectedStep.value?.status === 'Pending')
 const active = computed(() => props.node.status !== 'Pending')
 // Stream only what is still being written: the task while it runs, or its running step.
 const follow = computed(() => props.node.status === 'Running' && (props.step === '' || selectedStep.value?.status === 'Running'))
-const taskRunName = computed(() => props.taskRun || props.node.taskRunNames[0] || props.node.taskRunName)
+const taskRunName = computed(() => resolveTaskRun(props.node, props.taskRun))
 const stepSeconds = computed(() => {
   const s = selectedStep.value
   return s ? elapsedSeconds(s.startTime, s.completionTime, now.value) : null

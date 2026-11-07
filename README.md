@@ -132,7 +132,9 @@ TLS in front of the Service and use its URL as `--public-url`; session cookies a
 when it is `https`.
 
 The image is built with `make docker-build` (`docker/Dockerfile`: bun and Go build stages, a
-distroless non-root runtime).
+distroless non-root runtime). The base images are pinned by digest; Dependabot's `docker`
+ecosystem bumps tag and digest together, and `.dockerignore` keeps `.git`, `web/node_modules` and
+`web/dist` out of the build context.
 
 ## Security model
 
@@ -147,7 +149,10 @@ distroless non-root runtime).
   user's authorization of the OAuth app on GitHub (the next membership re-check fails) or rotate
   `--session-key`.
 - **Streams** (log and event streams) have a 30 second deadline per write, so a client that stops
-  reading is dropped instead of holding a goroutine and a pod-log stream open.
+  reading is dropped instead of holding a goroutine and a pod-log stream open. The event stream also
+  ends when its session expires, and in `github` mode each heartbeat (20 seconds) re-checks the
+  session and the (cached) organization membership, so a removed member or revoked token loses the
+  stream at the next re-check.
 - **CSRF**: unsafe requests need the header `X-Pacboard-CSRF` equal to the `pacboard_csrf` cookie.
 - **Reruns** post exactly `/retest <name>` or `/test <name>`, where the name is validated, as the
   user, with the user's token. pacboard has no service credentials to GitHub.

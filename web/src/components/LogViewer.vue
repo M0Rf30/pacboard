@@ -13,22 +13,14 @@ import {
   errorTargetIndex,
   filterLines,
   firstErrorIndex,
+  focusMatches,
   hiddenLineCount,
+  type FocusRequest,
   visibleFrom,
   visibleTail,
 } from '@/lib/logview'
 import { formatLocation, LogParser, MAX_LOG_LINES, type LogLevel, type LogLine, type Segment } from '@/lib/logparse'
 import Icon from './Icon.vue'
-
-/** Ask the viewer to reveal a line once the log has it: the error line, or a given line number. */
-export interface FocusRequest {
-  /** Changes for every request, so asking twice for the same line scrolls twice. */
-  seq: number
-  /** 1-based raw line number, or null. */
-  line: number | null
-  /** True: go to the error (`line` when the log has it, else the first `::error::`). */
-  error: boolean
-}
 
 const props = defineProps<{
   namespace: string
@@ -132,8 +124,9 @@ function resume(): void {
 
 async function load(): Promise<void> {
   controller?.abort()
-  // A focus request for the previous log is stale; the one for this log (same flush) is set after this runs.
-  pending = null
+  // A request for another log than the one now shown is stale; one aimed at this log (it may have arrived
+  // before the route switched the props over) stays pending.
+  if (pending && !focusMatches(pending, props)) pending = null
   parser = new LogParser()
   lines.value = parser.lines
   toggled.value = new Map()
@@ -203,7 +196,7 @@ function resolve(f: FocusRequest, ls: readonly LogLine[], final: boolean): numbe
 
 function tryFocus(final: boolean): void {
   const f = pending
-  if (!f) return
+  if (!f || !focusMatches(f, props)) return
   const ls = lines.value
   const idx = resolve(f, ls, final)
   if (idx < 0) {
@@ -238,6 +231,8 @@ function scrollToLine(no: number): void {
   programmaticScroll = true
   el.scrollTop = Math.max(0, row.offsetTop - el.clientHeight / 2 + row.offsetHeight / 2)
   requestAnimationFrame(() => (programmaticScroll = false))
+  // The panel may sit below the fold: bring the row into the window too (explicit reveals only).
+  row.scrollIntoView({ block: 'center', behavior: 'auto' })
 }
 
 watch(
@@ -251,7 +246,9 @@ watch(
 )
 
 // A permalink (?line=N) scrolls to its line once, when the log first has it.
-if (highlight.value !== null && props.focus === null) pending = { seq: 0, line: highlight.value, error: false }
+if (highlight.value !== null && props.focus === null) {
+  pending = { seq: 0, task: props.task, taskRun: props.taskRun, step: props.step, line: highlight.value, error: false }
+}
 
 function jumpTo(level: LogLevel): void {
   const ls = lines.value

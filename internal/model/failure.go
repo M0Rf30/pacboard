@@ -21,8 +21,12 @@ const WhenSkipReason = "When Expressions evaluated to false"
 var (
 	// CSI sequences (colors, cursor) and OSC sequences (titles, hyperlinks).
 	ansiRe = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
-	// GitHub-style annotation: "::error::msg" or "::error file=x,line=3::msg", anywhere in the line.
-	errorRe = regexp.MustCompile(`::error(?: [^\n]*?)?::(.*)`)
+	// GitHub-style annotation: "::error::msg" or "::error file=x,line=3::msg", at the start of the
+	// line. Same shape as ANNOTATION in web/src/lib/logparse.ts, so the API and the SPA agree on
+	// which lines are annotations.
+	errorRe = regexp.MustCompile(`^::error(?: [^:]*)?::(.*)$`)
+	// Group markers are not rows of their own in the SPA's log view.
+	groupRe = regexp.MustCompile(`^::(?:group::.*|endgroup::\s*)$`)
 )
 
 // StripANSI removes terminal escape sequences.
@@ -85,7 +89,11 @@ func SkippedAfterFailure(nodes []GraphNode) int {
 // non-empty line. The *int is the 1-based line number of that text, only when fromStart (the log text
 // begins at the log's first line); otherwise nil. The bool is false when the log has no text at all.
 func ErrorFromLog(log string, fromStart bool) (string, *int, bool) {
-	lines := strings.Split(StripANSI(log), "\n")
+	// Per line, like the SPA: an unterminated escape sequence must not swallow the lines after it.
+	lines := strings.Split(log, "\n")
+	for i, l := range lines {
+		lines[i] = StripANSI(lastRewrite(l))
+	}
 
 	pick := func(i int, text string) (string, *int, bool) {
 		var ln *int
@@ -107,12 +115,23 @@ func ErrorFromLog(log string, fromStart bool) (string, *int, bool) {
 	}
 
 	for i, l := range slices.Backward(lines) {
-		if text := strings.TrimSpace(l); text != "" {
+		if text := strings.TrimSpace(l); text != "" && !groupRe.MatchString(l) {
 			return pick(i, text)
 		}
 	}
 
 	return "", nil, false
+}
+
+// lastRewrite returns what a terminal shows for a line: progress bars rewrite it with \r, so only
+// the text after the last \r (ignoring one trailing \r from CRLF) remains.
+func lastRewrite(l string) string {
+	l = strings.TrimSuffix(l, "\r")
+	if i := strings.LastIndexByte(l, '\r'); i >= 0 {
+		return l[i+1:]
+	}
+
+	return l
 }
 
 // CapMessage strips ANSI codes and cuts the text to MaxFailureMessage characters.

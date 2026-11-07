@@ -32,6 +32,9 @@ const (
 type APIError struct {
 	Status  int
 	Message string
+	// RateLimited is set when the answer carries a rate-limit signal (Retry-After, or
+	// X-RateLimit-Remaining: 0): the request was throttled, not refused.
+	RateLimited bool
 }
 
 func (e *APIError) Error() string {
@@ -104,7 +107,9 @@ func (c *Client) do(req *http.Request, out any) error {
 
 		_ = json.Unmarshal(body, &e)
 
-		return &APIError{Status: resp.StatusCode, Message: e.Message}
+		limited := resp.Header.Get("Retry-After") != "" || resp.Header.Get("X-Ratelimit-Remaining") == "0"
+
+		return &APIError{Status: resp.StatusCode, Message: e.Message, RateLimited: limited}
 	}
 
 	if out == nil {
@@ -202,7 +207,8 @@ func (c *Client) User(ctx context.Context, token string) (User, error) {
 
 // IsActiveMember reports whether the token's user is an active member of org. A user
 // outside the organization (404) or one the token cannot see into (403) is not a member;
-// 401 (bad token) and transport errors are returned.
+// 401 (bad token), rate-limited answers (403/429 with Retry-After or X-RateLimit-Remaining: 0)
+// and transport errors are returned.
 func (c *Client) IsActiveMember(ctx context.Context, token, org string) (bool, error) {
 	req, err := c.api(ctx, token, http.MethodGet, "/user/memberships/orgs/"+url.PathEscape(org), nil)
 	if err != nil {
@@ -215,7 +221,8 @@ func (c *Client) IsActiveMember(ctx context.Context, token, org string) (bool, e
 
 	if err := c.do(req, &m); err != nil {
 		var apiErr *APIError
-		if errors.As(err, &apiErr) && (apiErr.Status == http.StatusNotFound || apiErr.Status == http.StatusForbidden) {
+		if errors.As(err, &apiErr) && !apiErr.RateLimited &&
+			(apiErr.Status == http.StatusNotFound || apiErr.Status == http.StatusForbidden) {
 			return false, nil
 		}
 

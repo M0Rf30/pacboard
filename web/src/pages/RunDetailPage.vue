@@ -12,18 +12,19 @@ import { api } from '@/api/client'
 import Breadcrumb from '@/components/Breadcrumb.vue'
 import FailureCallout from '@/components/FailureCallout.vue'
 import LiveIndicator from '@/components/LiveIndicator.vue'
-import type { FocusRequest } from '@/components/LogViewer.vue'
 import PipelineGraph from '@/components/PipelineGraph.vue'
 import RerunButtons from '@/components/RerunButtons.vue'
 import RunHeader from '@/components/RunHeader.vue'
 import StateMessage from '@/components/StateMessage.vue'
 import TaskPanel from '@/components/TaskPanel.vue'
 import { useLive } from '@/composables/useLive'
+import { setQueryParams } from '@/composables/useQueryRef'
 import { useMe } from '@/composables/useMe'
 import { usePageTitle } from '@/composables/usePageTitle'
 import { useResource } from '@/composables/useResource'
 import { isTyping } from '@/lib/keys'
-import { failureTargets, landingSelection, neighbourStep, pickTask, type Selection } from '@/lib/runview'
+import type { FocusRequest } from '@/lib/logview'
+import { failureTargets, landingSelection, neighbourStep, pickTask, resolveTaskRun, type Selection } from '@/lib/runview'
 
 const props = defineProps<{ namespace: string; name: string }>()
 
@@ -47,14 +48,9 @@ function query(key: Key): string {
   return typeof v === 'string' ? v : ''
 }
 
-// One replace for several keys: separate writes would each start from the same stale route.query.
+// Same-tick writes (select + highlight) share one replace built from the router's current query.
 function setQuery(patch: Partial<Record<Key, string>>): void {
-  const q = { ...route.query }
-  for (const [k, v] of Object.entries(patch)) {
-    if (v) q[k] = v
-    else delete q[k]
-  }
-  void router.replace({ query: q })
+  setQueryParams(router, patch as Record<string, string>)
 }
 
 function select(sel: Selection): void {
@@ -77,8 +73,17 @@ const highlight = computed<number | null>({
 // Where "Go to error line" and a failed landing send the log viewer.
 const focus = ref<FocusRequest | null>(null)
 let seq = 0
-function requestError(): void {
-  focus.value = { seq: ++seq, line: failure.value?.line ?? null, error: true }
+function requestError(sel: Selection): void {
+  const node = nodes.value.find((n) => n.id === sel.task)
+  if (!node) return
+  focus.value = {
+    seq: ++seq,
+    task: sel.task,
+    taskRun: resolveTaskRun(node, sel.taskRun),
+    step: sel.step,
+    line: failure.value?.line ?? null,
+    error: true,
+  }
 }
 
 // Open the task most worth looking at when the link names none: the failure, else the last task that ran.
@@ -92,7 +97,7 @@ watch(
     const sel = landingSelection(d.nodes, d.summary.status, d.failure)
     if (!sel.task) return
     select(sel)
-    if (failureTargets(d.failure, sel)) requestError()
+    if (failureTargets(d.failure, sel, d.nodes.find((n) => n.id === sel.task))) requestError(sel)
   },
   { immediate: true },
 )
@@ -102,17 +107,26 @@ usePageTitle(() => (summary.value ? summary.value.git.shaTitle || summary.value.
 function pick(id: string): void {
   const node = nodes.value.find((n) => n.id === id)
   if (!node) return
-  const sel = pickTask(node)
+  const sel = pickTask(node, failure.value)
   select(sel)
-  if (failureTargets(failure.value, sel)) requestError()
+  if (failureTargets(failure.value, sel, node)) requestError(sel)
 }
 
 function goToError(): void {
   const d = data.value
   const f = d?.failure
   if (!d || !f || !f.task) return
-  select(landingSelection(d.nodes, 'Failed', f))
-  requestError()
+  const sel = landingSelection(d.nodes, 'Failed', f)
+  const node = d.nodes.find((n) => n.id === sel.task)
+  const cur = selection.value
+  // Already there: leave the URL (and ?line=) alone and just re-reveal.
+  const here =
+    node !== undefined &&
+    cur.task === sel.task &&
+    cur.step === sel.step &&
+    resolveTaskRun(node, cur.taskRun) === resolveTaskRun(node, sel.taskRun)
+  if (!here) select(sel)
+  requestError(sel)
 }
 
 const graphOpen = ref(true)

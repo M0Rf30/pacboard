@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: The pacboard Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# The build context of docker/Dockerfile is the repository root. The image needs go.mod, go.sum,
+# cmd/, internal/ and web/ (sources); everything below is either rebuilt inside the image or unused.
+
+.git
+.github
+
+# The SPA is built inside the web-builder stage and copied over web/dist; host copies of its
+# dependencies or output would only bloat the context (and node_modules is platform specific).
+web/node_modules
+web/dist
+web/.vite
+web/coverage
+
+# Not part of the image.
+charts
+deploy
+docs
+bin
+tmp
+.tmp
+.env*
+*.log
+*.test

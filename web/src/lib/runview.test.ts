@@ -139,3 +139,16 @@ describe('failureTargets', () => {
     expect(failureTargets(null, { task: 'lint', step: 'run', taskRun: '' })).toBe(false)
   })
 })
+
+describe('matrix failure TaskRun', () => {
+  const m = node('test', 'Failed', [step('run', 'Failed')], { taskRunNames: ['test-0', 'test-1'], taskRunName: 'test-0', matrixCount: 2 })
+  const f = failure({ task: 'test', taskRun: 'test-1' })
+  it('picks the failing TaskRun and only targets it', () => {
+    expect(pickTask(m, f)).toEqual({ task: 'test', step: 'run', taskRun: 'test-1' })
+    expect(pickTask(m)).toEqual({ task: 'test', step: 'run', taskRun: '' })
+    expect(failureTargets(f, { task: 'test', step: 'run', taskRun: 'test-1' }, m)).toBe(true)
+    expect(failureTargets(f, { task: 'test', step: 'run', taskRun: '' }, m)).toBe(false)
+    expect(failureTargets(f, { task: 'test', step: 'run', taskRun: 'test-0' }, m)).toBe(false)
+    expect(failureTargets(failure({ task: 'test', taskRun: 'test-0' }), { task: 'test', step: 'run', taskRun: '' }, m)).toBe(true)
+  })
+})

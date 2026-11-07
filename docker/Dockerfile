@@ -4,7 +4,7 @@
 
 # ---- Frontend build stage ---------------------------------------------------
 # Builds the Vue 3 SPA so web/dist/ is populated before Go's //go:embed runs.
-FROM --platform=$BUILDPLATFORM docker.io/oven/bun:1-alpine AS web-builder
+FROM --platform=$BUILDPLATFORM docker.io/oven/bun:1-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS web-builder
 
 WORKDIR /web
 
@@ -15,7 +15,7 @@ COPY web/ ./
 RUN bun run build
 
 # ---- Backend build stage ----------------------------------------------------
-FROM --platform=$BUILDPLATFORM docker.io/golang:1.27-alpine AS builder
+FROM --platform=$BUILDPLATFORM docker.io/golang:1.27-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18 AS builder
 
 WORKDIR /app
 
@@ -39,7 +39,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
 
 # ---- Runtime stage ----------------------------------------------------------
 # Shell-less, non-root (uid 65532). pacboard needs no writable filesystem.
-FROM gcr.io/distroless/static-debian13:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329
 
 ARG VERSION=dev
 ARG COMMIT=unknown

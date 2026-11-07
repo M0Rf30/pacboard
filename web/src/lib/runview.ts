@@ -36,9 +36,15 @@ export function defaultStep(n: GraphNode): string {
   return n.steps.length === 1 ? n.steps[0]!.name : ''
 }
 
-/** Selection for a task the user clicked. */
-export function pickTask(n: GraphNode): Selection {
-  return { task: n.id, step: defaultStep(n), taskRun: '' }
+/** The TaskRun a selection shows: the chosen one, else the node's first (the "" default resolved). */
+export function resolveTaskRun(n: GraphNode, taskRun: string): string {
+  return taskRun || n.taskRunNames[0] || n.taskRunName
+}
+
+/** Selection for a task the user clicked; on the failed task of a matrix it is the failing TaskRun. */
+export function pickTask(n: GraphNode, failure: Failure | null = null): Selection {
+  const taskRun = failure && failure.task === n.id && n.taskRunNames.includes(failure.taskRun) ? failure.taskRun : ''
+  return { task: n.id, step: defaultStep(n), taskRun }
 }
 
 /** The task that ended last among the executed ones (by start time; API order breaks ties). */
@@ -94,6 +100,10 @@ export function neighbourStep(n: GraphNode, current: string, delta: 1 | -1): str
  * Whether a run counts as having failed in the selected step: the "Go to error line" target. The
  * failure names task and step; a step-less failure (timeout) only has a task.
  */
-export function failureTargets(failure: Failure | null, sel: Selection): boolean {
-  return failure !== null && failure.task !== '' && failure.task === sel.task && (failure.step === '' || failure.step === sel.step)
+export function failureTargets(failure: Failure | null, sel: Selection, node?: GraphNode): boolean {
+  if (failure === null || failure.task === '' || failure.task !== sel.task) return false
+  if (failure.step !== '' && failure.step !== sel.step) return false
+  // A matrix task: the failure belongs to one TaskRun, and "" means the first one.
+  if (node && failure.taskRun && node.taskRunNames.includes(failure.taskRun)) return resolveTaskRun(node, sel.taskRun) === failure.taskRun
+  return true
 }

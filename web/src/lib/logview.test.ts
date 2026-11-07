@@ -9,6 +9,7 @@ import {
   errorTargetIndex,
   filterLines,
   firstErrorIndex,
+  focusMatches,
   hiddenLineCount,
   lineMatches,
   visibleFrom,
@@ -94,5 +95,15 @@ describe('filtering', () => {
     expect(filterLines(lines, '', true).map((l) => l.level)).toEqual(['warning', 'error'])
     expect(filterLines(lines, 'e', true).map((l) => l.level)).toEqual(['error'])
     expect(filterLines(lines, '', false)).toHaveLength(4)
+  })
+})
+
+describe('focusMatches', () => {
+  const req = { seq: 1, task: 'lint', taskRun: 'run-lint', step: 'go', line: 4, error: true }
+  it('matches only the log the request names', () => {
+    expect(focusMatches(req, { task: 'lint', taskRun: 'run-lint', step: 'go' })).toBe(true)
+    expect(focusMatches(req, { task: 'build', taskRun: 'run-lint', step: 'go' })).toBe(false)
+    expect(focusMatches(req, { task: 'lint', taskRun: 'run-lint-2', step: 'go' })).toBe(false)
+    expect(focusMatches(req, { task: 'lint', taskRun: 'run-lint', step: '' })).toBe(false)
   })
 })

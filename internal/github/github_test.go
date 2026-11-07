@@ -99,3 +99,48 @@ func TestPostCommentErrorMapping(t *testing.T) {
 		t.Errorf("transport error = %v", err)
 	}
 }
+
+func TestIsActiveMemberStatusMapping(t *testing.T) {
+	for name, tt := range map[string]struct {
+		status  int
+		headers map[string]string
+		reply   string
+		member  bool
+		wantErr bool
+	}{
+		"active":                {http.StatusOK, nil, `{"state":"active"}`, true, false},
+		"pending":               {http.StatusOK, nil, `{"state":"pending"}`, false, false},
+		"not a member":          {http.StatusNotFound, nil, `{}`, false, false},
+		"forbidden":             {http.StatusForbidden, nil, `{}`, false, false},
+		"forbidden remaining>0": {http.StatusForbidden, map[string]string{"X-RateLimit-Remaining": "12"}, `{}`, false, false},
+		"unauthorized":          {http.StatusUnauthorized, nil, `{}`, false, true},
+		"403 retry-after":       {http.StatusForbidden, map[string]string{"Retry-After": "60"}, `{}`, false, true},
+		"403 primary limit":     {http.StatusForbidden, map[string]string{"X-RateLimit-Remaining": "0"}, `{}`, false, true},
+		"429 retry-after":       {http.StatusTooManyRequests, map[string]string{"Retry-After": "60"}, `{}`, false, true},
+		"429 plain":             {http.StatusTooManyRequests, nil, `{}`, false, true},
+		"404 with retry-after":  {http.StatusNotFound, map[string]string{"Retry-After": "1"}, `{}`, false, true},
+		"server error":          {http.StatusBadGateway, nil, `{}`, false, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				for k, v := range tt.headers {
+					w.Header().Set(k, v)
+				}
+
+				w.WriteHeader(tt.status)
+				_, _ = io.WriteString(w, tt.reply)
+			}))
+			t.Cleanup(srv.Close)
+
+			c, err := New(srv.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			member, err := c.IsActiveMember(context.Background(), "tok", "org")
+			if (err != nil) != tt.wantErr || member != tt.member {
+				t.Fatalf("got %v, %v", member, err)
+			}
+		})
+	}
+}

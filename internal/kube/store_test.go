@@ -234,3 +234,60 @@ func TestNotifySilentBeforeReady(t *testing.T) {
 		t.Fatal("no event after ready")
 	}
 }
+
+func TestRepositoriesCachedUntilStoreChanges(t *testing.T) {
+	repo := obj("pipelinesascode.tekton.dev/v1alpha1", "Repository", "ci", "a", nil, nil, map[string]any{"url": "https://github.com/o/a"})
+	done := plr("ci", "a-1", "a", "7", "2026-01-01T10:00:00Z", "True")
+
+	s, client := newTestStore(t, repo, done)
+
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
+
+	events, cancel := s.Subscribe()
+	defer cancel()
+
+	first := s.Repositories()
+	if len(first) != 1 || first[0].RunCount != 1 {
+		t.Fatalf("repositories = %+v", first)
+	}
+
+	// Nothing changed (and nothing is running): the same result is served, even as the clock moves.
+	now = now.Add(time.Minute)
+
+	if again := s.Repositories(); &again[0] != &first[0] {
+		t.Fatal("unchanged store recomputed the repositories")
+	}
+
+	running := plr("ci", "a-2", "a", "8", "2026-01-01T12:01:00Z", "Unknown")
+	if _, err := client.Resource(PipelineRunGVR).Namespace("ci").Create(context.Background(), running, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-events:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no event")
+	}
+
+	after := s.Repositories()
+	if len(after) != 1 || after[0].RunCount != 2 || after[0].LastRun == nil || after[0].LastRun.Name != "a-2" {
+		t.Fatalf("after change = %+v", after)
+	}
+
+	if d := after[0].LastRun.DurationSeconds; d == nil || *d != 0 {
+		t.Fatalf("running duration = %v, want 0 at the creation clock", d)
+	}
+
+	// A run in progress shows a duration that grows with the clock, so the result is per second.
+	now = now.Add(30 * time.Second)
+
+	grown := s.Repositories()
+	if d := grown[0].LastRun.DurationSeconds; d == nil || *d != 30 {
+		t.Fatalf("running duration after 30s = %v", d)
+	}
+
+	if same := s.Repositories(); &same[0] != &grown[0] {
+		t.Fatal("same second recomputed the repositories")
+	}
+}

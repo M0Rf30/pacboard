@@ -4,6 +4,27 @@
 
 import { formatLocation, lineText, type LogLine } from './logparse'
 
+/** Ask the viewer to reveal a line of one specific log once the log has it: the error line, or a given line number. */
+export interface FocusRequest {
+  /** Changes for every request, so asking twice for the same line scrolls twice. */
+  seq: number
+  /** The log the line belongs to; the viewer ignores the request while it shows another one. */
+  task: string
+  /** Resolved TaskRun name (never the "" default). */
+  taskRun: string
+  /** Step name, "" for all steps. */
+  step: string
+  /** 1-based raw line number, or null. */
+  line: number | null
+  /** True: go to the error (`line` when the log has it, else the first `::error::`). */
+  error: boolean
+}
+
+/** Whether a request targets the log the viewer currently shows. `taskRun` is the resolved name. */
+export function focusMatches(f: FocusRequest, shown: { task: string; taskRun: string; step: string }): boolean {
+  return f.task === shown.task && f.taskRun === shown.taskRun && f.step === shown.step
+}
+
 function hiddenBy(l: LogLine, closed: ReadonlySet<number>): boolean {
   return closed.size > 0 && l.path.some((id) => closed.has(id))
 }

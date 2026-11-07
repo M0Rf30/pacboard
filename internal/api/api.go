@@ -58,7 +58,9 @@ type handler struct {
 	failures failureCache
 }
 
-const heartbeat = 20 * time.Second
+// heartbeat is the interval of SSE comments that keep proxies from closing an idle stream; a variable
+// so that tests can shorten it.
+var heartbeat = 20 * time.Second
 
 // New builds the HTTP handler: routes, auth gates, security headers, request logging.
 func New(d Deps) http.Handler {
