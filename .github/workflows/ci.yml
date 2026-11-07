@@ -54,8 +54,8 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
 
-  # Lints the Helm chart on every push; on a v* tag publishes it to oci://ghcr.io/m0rf30/charts
-  # together with the Artifact Hub repository metadata (artifacthub-repo.yml).
+  # Lints the Helm chart on every push; on a v* tag publishes it to oci://ghcr.io/m0rf30/charts.
+  # The Artifact Hub repository metadata (artifacthub-repo.yml) is pushed on every push to main or a tag.
   chart:
     needs: [image]
     runs-on: ubuntu-latest
@@ -89,10 +89,12 @@ jobs:
           echo "$GH_TOKEN" | helm registry login ghcr.io -u "$GH_ACTOR" --password-stdin
           helm package charts/pacboard --destination dist
           helm push dist/pacboard-*.tgz oci://ghcr.io/m0rf30/charts
+      # Metadata is independent of chart versions: refresh it on main too, so an edit to
+      # artifacthub-repo.yml takes effect without a release.
       - uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63 # v2.0.3
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push'
       - name: Publish Artifact Hub metadata
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push'
         env:
           GH_ACTOR: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
