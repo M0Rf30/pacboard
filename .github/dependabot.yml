@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: The pacboard Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Not tracked by Dependabot (bump by hand): GO_VERSION and GOLANGCI_LINT_VERSION in ci.yml.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      go-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: bun
+    directory: /web
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      web-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
